@@ -1,7 +1,9 @@
 # Staged Changes
 
-Changes accumulating here are waiting to be included in the next release.
-This file is tracked in the repo and updated as branches are merged into `develop`.
+Changes accumulating here have already been merged into `develop`.
+We keep track of these changes/fixes/features and when we have enough for a new version we decide on the next version release.
+
+This file is tracked in the repo and visible to everyone.
 
 ---
 
