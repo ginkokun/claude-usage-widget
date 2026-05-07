@@ -1,6 +1,8 @@
 # Staged Changes (Local Only)
 
-Changes accumulating here are waiting to be merged into `develop`.
+Changes accumulating here have already been merged into `develop`.
+We keep track of these changes/fixes/features and when we have enough for a new version we decide on the next version release.
+
 This file is gitignored — it never gets pushed to the remote repo.
 
 ---
