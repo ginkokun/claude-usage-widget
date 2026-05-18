@@ -632,6 +632,27 @@ function destroyTrayIcons() {
 }
 
 /**
+ * Format reset time for tray tooltip
+ * @param {string} resetsAt - ISO timestamp string
+ * @param {string} timeFormat - '12h' or '24h'
+ * @returns {string} Formatted time string
+ */
+function formatResetTime(resetsAt, timeFormat) {
+  if (!resetsAt) return null;
+  const date = new Date(resetsAt);
+  
+  if (timeFormat === '24h') {
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  } else {
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return `${hours}:${minutes} ${ampm}`;
+  }
+}
+
+/**
  * Update tray icons with current usage data
  * @param {Object} usageData - Usage data object containing session and weekly percentages
  */
@@ -662,13 +683,16 @@ function updateTrayIcon(usageData) {
 
   if ((!sessionTray || sessionTray.isDestroyed()) && (!weeklyTray || weeklyTray.isDestroyed())) return;
 
-  // Get threshold settings
+  // Get threshold settings and time format
   const warnThreshold = store.get('settings.warnThreshold', 75);
   const dangerThreshold = store.get('settings.dangerThreshold', 90);
+  const timeFormat = store.get('settings.timeFormat', '12h');
 
-  // Extract percentages from usage data
+  // Extract percentages and reset times from usage data
   const sessionPercent = usageData?.five_hour?.utilization || 0;
+  const sessionResetsAt = usageData?.five_hour?.resets_at;
   const weeklyPercent = usageData?.seven_day?.utilization || 0;
+  const weeklyResetsAt = usageData?.seven_day?.resets_at;
 
   try {
     // Generate Weekly icon (blue background) - LEFT position
@@ -681,7 +705,12 @@ function updateTrayIcon(usageData) {
     }
     if (weeklyTray && !weeklyTray.isDestroyed()) {
       weeklyTray.setImage(weeklyIcon);
-      weeklyTray.setToolTip(`Weekly: ${Math.round(weeklyPercent)}%`);
+      let weeklyTooltip = `Weekly: ${Math.round(weeklyPercent)}%`;
+      const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat);
+      if (weeklyResetTime) {
+        weeklyTooltip += `\nResets: ${weeklyResetTime}`;
+      }
+      weeklyTray.setToolTip(weeklyTooltip);
     }
     
     // Generate Session icon (purple background) - RIGHT position
@@ -694,7 +723,12 @@ function updateTrayIcon(usageData) {
     }
     if (sessionTray && !sessionTray.isDestroyed()) {
       sessionTray.setImage(sessionIcon);
-      sessionTray.setToolTip(`Session: ${Math.round(sessionPercent)}%`);
+      let sessionTooltip = `Session: ${Math.round(sessionPercent)}%`;
+      const sessionResetTime = formatResetTime(sessionResetsAt, timeFormat);
+      if (sessionResetTime) {
+        sessionTooltip += `\nResets: ${sessionResetTime}`;
+      }
+      sessionTray.setToolTip(sessionTooltip);
     }
   } catch (error) {
     console.error('Failed to update tray icons:', error);
