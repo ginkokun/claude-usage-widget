@@ -830,6 +830,13 @@ function checkUsageAlerts(data) {
 function applyCompactMode(compact) {
     isCompactMode = compact;
 
+    // Add/remove compact-mode class from body for CSS styling
+    if (compact) {
+        document.body.classList.add('compact-mode');
+    } else {
+        document.body.classList.remove('compact-mode');
+    }
+
     // Show/hide the correct content view
     elements.mainContent.style.display = compact ? 'none' : 'block';
     elements.compactContent.style.display = compact ? 'flex' : 'none';
