@@ -1341,6 +1341,11 @@ body.theme-light .settings-select option {
 
 /* ── Compact Mode ──────────────────────────────────────────── */
 
+/* Reduce title font size in compact mode to prevent wrapping */
+body.compact-mode .title {
+    font-size: 14px;
+}
+
 /* Collapse chevron — fixed position in content area, does not move when rows expand */
 .compact-collapse-btn {
     position: absolute;
