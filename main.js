@@ -635,20 +635,32 @@ function destroyTrayIcons() {
  * Format reset time for tray tooltip
  * @param {string} resetsAt - ISO timestamp string
  * @param {string} timeFormat - '12h' or '24h'
+ * @param {boolean} includeDate - Whether to include the date (for weekly resets)
  * @returns {string} Formatted time string
  */
-function formatResetTime(resetsAt, timeFormat) {
+function formatResetTime(resetsAt, timeFormat, includeDate = false) {
   if (!resetsAt) return null;
   const date = new Date(resetsAt);
   
-  if (timeFormat === '24h') {
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  const formatTime = () => {
+    if (timeFormat === '24h') {
+      return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    } else {
+      let hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      return `${hours}:${minutes} ${ampm}`;
+    }
+  };
+  
+  if (includeDate) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthStr = months[date.getMonth()];
+    const dayNum = date.getDate();
+    return `${monthStr} ${dayNum}, ${formatTime()}`;
   } else {
-    let hours = date.getHours();
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
-    return `${hours}:${minutes} ${ampm}`;
+    return formatTime();
   }
 }
 
@@ -706,7 +718,7 @@ function updateTrayIcon(usageData) {
     if (weeklyTray && !weeklyTray.isDestroyed()) {
       weeklyTray.setImage(weeklyIcon);
       let weeklyTooltip = `Weekly: ${Math.round(weeklyPercent)}%`;
-      const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat);
+      const weeklyResetTime = formatResetTime(weeklyResetsAt, timeFormat, true);
       if (weeklyResetTime) {
         weeklyTooltip += `\nResets: ${weeklyResetTime}`;
       }
@@ -724,7 +736,7 @@ function updateTrayIcon(usageData) {
     if (sessionTray && !sessionTray.isDestroyed()) {
       sessionTray.setImage(sessionIcon);
       let sessionTooltip = `Session: ${Math.round(sessionPercent)}%`;
-      const sessionResetTime = formatResetTime(sessionResetsAt, timeFormat);
+      const sessionResetTime = formatResetTime(sessionResetsAt, timeFormat, false);
       if (sessionResetTime) {
         sessionTooltip += `\nResets: ${sessionResetTime}`;
       }
