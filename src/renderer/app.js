@@ -68,7 +68,9 @@ const elements = {
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     logoutBtn: document.getElementById('logoutBtn'),
     coffeeBtn: document.getElementById('coffeeBtn'),
+    autoStartCol: document.getElementById('autoStartCol'),
     autoStartToggle: document.getElementById('autoStartToggle'),
+    autoStartHint: document.getElementById('autoStartHint'),
     minimizeToTrayToggle: document.getElementById('minimizeToTrayToggle'),
     alwaysOnTopToggle: document.getElementById('alwaysOnTopToggle'),
     showTrayStatsToggle: document.getElementById('showTrayStatsToggle'),
@@ -828,6 +830,13 @@ function checkUsageAlerts(data) {
 function applyCompactMode(compact) {
     isCompactMode = compact;
 
+    // Add/remove compact-mode class from body for CSS styling
+    if (compact) {
+        document.body.classList.add('compact-mode');
+    } else {
+        document.body.classList.remove('compact-mode');
+    }
+
     // Show/hide the correct content view
     elements.mainContent.style.display = compact ? 'none' : 'block';
     elements.compactContent.style.display = compact ? 'flex' : 'none';
@@ -1460,8 +1469,16 @@ let dangerThreshold = 90;
 
 async function loadSettings() {
     const settings = await window.electronAPI.getSettings();
+    const isLinux = window.electronAPI.platform === 'linux';
 
-    elements.autoStartToggle.checked = settings.autoStart;
+    elements.autoStartToggle.checked = isLinux ? false : settings.autoStart;
+    elements.autoStartToggle.disabled = isLinux;
+    if (elements.autoStartCol) {
+        elements.autoStartCol.classList.toggle('settings-col-disabled', isLinux);
+    }
+    if (elements.autoStartHint) {
+        elements.autoStartHint.style.display = isLinux ? 'inline' : 'none';
+    }
     elements.minimizeToTrayToggle.checked = settings.minimizeToTray;
     elements.alwaysOnTopToggle.checked = settings.alwaysOnTop;
     elements.showTrayStatsToggle.checked = settings.showTrayStats || false;
@@ -1506,7 +1523,7 @@ async function saveSettings() {
     }
 
     const settings = {
-        autoStart: elements.autoStartToggle.checked,
+        autoStart: window.electronAPI.platform === 'linux' ? false : elements.autoStartToggle.checked,
         minimizeToTray: elements.minimizeToTrayToggle.checked,
         alwaysOnTop: elements.alwaysOnTopToggle.checked,
         showTrayStats: elements.showTrayStatsToggle.checked,
