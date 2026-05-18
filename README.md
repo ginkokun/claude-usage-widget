@@ -43,12 +43,15 @@ A toggleable usage history graph now sits below the main widget. Click the graph
 
 ![Claude Usage Widget - Graph](assets/screenshot-graph.png)
 
-- Displays up to **7 days** of session and weekly usage history
-- History **persists across restarts** — no need to keep the app running continuously
+- Displays up to **7 days** of collected usage data points
+- **Data points are captured each time the app refreshes** (every 5 minutes by default when running)
+- History **persists across restarts** — collected data is retained when you close and reopen the app
 - Sonnet and Extra Usage lines appear automatically when those sections are relevant
 - **Adaptive x-axis labels** — shows times for short spans, weekday+hour for medium spans, and dates for longer spans
 - Respects your **12h/24h time format** setting
 - Hover tooltip shows exact timestamp and value
+
+> **Note:** The graph shows usage snapshots captured at each refresh interval while the app is running. Time periods when the app is closed are not represented on the graph.
 
 ### 🌍 Currency Support
 The Extra Usage row now displays the correct currency symbol based on your account's billing currency — **€**, **£**, or **$**.
