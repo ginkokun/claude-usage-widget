@@ -5,6 +5,7 @@ let countdownInterval = null;
 let latestUsageData = null;
 let isExpanded = false;
 let isCompactMode = false;
+let _settingsOpenedFromCompact = false;
 let usageChart = null;
 let graphVisible = false;
 let graphWasVisible = false; // preserves graph state across compact mode toggle
@@ -300,7 +301,16 @@ function setupEventListeners() {
     elements.closeSettingsBtn.addEventListener('click', async () => {
         await saveSettings();
         elements.settingsOverlay.style.display = 'none';
-        if (!isCompactMode) resizeWidget();
+        if (_settingsOpenedFromCompact) {
+            _settingsOpenedFromCompact = false;
+            if (isCompactMode) {
+                window.electronAPI.setCompactMode(true);
+            } else {
+                resizeWidget();
+            }
+        } else if (!isCompactMode) {
+            resizeWidget();
+        }
         startAutoUpdate();
     });
 
@@ -387,17 +397,16 @@ function setupEventListeners() {
     // Organization selector — change triggers immediate save and refresh
     elements.orgSelector.addEventListener('change', handleOrgChange);
 
-    // Settings button — open compact settings if in compact mode, full settings otherwise
+    // Settings button — always open full settings; if in compact mode, temporarily expand the window first
     elements.settingsBtn.addEventListener('click', async () => {
         stopAutoUpdate();
         if (isCompactMode) {
-            elements.compactModeToggleCompact.checked = isCompactMode;
-            elements.compactSettingsOverlay.style.display = 'flex';
-        } else {
-            await loadSettings();
-            elements.settingsOverlay.style.display = 'flex';
-            window.electronAPI.resizeWindow(318); // Increased from 288 for org selector row
+            _settingsOpenedFromCompact = true;
+            window.electronAPI.setCompactMode(false);
         }
+        await loadSettings();
+        elements.settingsOverlay.style.display = 'flex';
+        window.electronAPI.resizeWindow(318);
     });
 
     // Close compact settings — apply compact toggle value then close
