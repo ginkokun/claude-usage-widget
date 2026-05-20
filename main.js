@@ -73,16 +73,6 @@ function storeUsageHistory(data) {
   const organizationId = store.get('organizationId');
   const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
 
-  // One-time migration: carry forward legacy single-account history to the per-org key
-  if (organizationId && !store.has(historyKey)) {
-    const legacy = store.get('usageHistory', []);
-    if (legacy.length > 0) {
-      store.set(historyKey, legacy);
-      store.delete('usageHistory');
-      debugLog('[History] Migrated legacy usageHistory →', historyKey);
-    }
-  }
-
   const timestamp = Date.now();
   let history = store.get(historyKey, []);
 
@@ -103,6 +93,21 @@ function storeUsageHistory(data) {
   }
 
   store.set(historyKey, history);
+}
+
+// Migrate legacy single-key history to the per-org namespaced key at startup,
+// so get-usage-history reads from the right place before any fetch has run.
+function migrateUsageHistoryKey() {
+  const organizationId = store.get('organizationId');
+  if (!organizationId) return;
+  const historyKey = `usageHistory_${organizationId}`;
+  if (store.has(historyKey)) return;
+  const legacy = store.get('usageHistory', []);
+  if (legacy.length > 0) {
+    store.set(historyKey, legacy);
+    store.delete('usageHistory');
+    debugLog('[History] Migrated legacy usageHistory →', historyKey);
+  }
 }
 
 // Prune all per-org history keys at startup. Trims entries older than the retention
@@ -1412,6 +1417,7 @@ app.whenReady().then(async () => {
     await setSessionCookie(sessionKey);
   }
 
+  migrateUsageHistoryKey();
   pruneStaleHistoryKeys();
 
   createMainWindow();
