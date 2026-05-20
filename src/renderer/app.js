@@ -1266,7 +1266,7 @@ function renderChart(history) {
     const datasets = [
         {
             label: 'Session',
-            data: history.map((entry) => entry.session),
+            data: history.map((entry) => ({ x: entry.timestamp, y: entry.session })),
             borderColor: '#8b5cf6',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -1277,7 +1277,7 @@ function renderChart(history) {
         },
         {
             label: 'Weekly',
-            data: history.map((entry) => entry.weekly),
+            data: history.map((entry) => ({ x: entry.timestamp, y: entry.weekly })),
             borderColor: '#3b82f6',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -1293,7 +1293,7 @@ function renderChart(history) {
         if (sonnetData.some((value) => value > 0)) {
             datasets.push({
             label: 'Sonnet',
-            data: sonnetData,
+            data: history.map((entry) => ({ x: entry.timestamp, y: entry.sonnet || 0 })),
             borderColor: '#10b981',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -1310,7 +1310,7 @@ function renderChart(history) {
         if (extraUsageData.some((value) => value > 0)) {
             datasets.push({
             label: 'Extra Usage',
-            data: extraUsageData,
+            data: history.map((entry) => ({ x: entry.timestamp, y: entry.extraUsage || 0 })),
             borderColor: '#f59e0b',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -1324,10 +1324,7 @@ function renderChart(history) {
 
     usageChart = new Chart(elements.usageChart.getContext('2d'), {
         type: 'line',
-        data: {
-            labels: history.map((entry) => entry.timestamp),
-            datasets
-        },
+        data: { datasets },
         options: {
             animation: false,
             responsive: true,
@@ -1338,17 +1335,20 @@ function renderChart(history) {
             },
             scales: {
                 x: {
-                    offset: true,
+                    type: 'linear',
                     ticks: {
-                        autoSkip: false,
+                        maxTicksLimit: 5,
                         maxRotation: 0,
                         minRotation: 0,
                         font: {
                             size: 10
                         },
-                        callback(value, index) {
+                        callback(value) {
                             const tf = (window._cachedSettings || {}).timeFormat || '12h';
-                            return formatXAxisTick(history, index, tf);
+                            const spanMs = history.length > 1
+                                ? history[history.length - 1].timestamp - history[0].timestamp
+                                : 0;
+                            return formatTimestampTick(value, spanMs, tf);
                         }
                     },
                     grid: {
@@ -1376,8 +1376,7 @@ function renderChart(history) {
                 tooltip: {
                     callbacks: {
                         title(items) {
-                            const point = history[items[0].dataIndex];
-                            return new Date(point.timestamp).toLocaleString([], {
+                            return new Date(items[0].parsed.x).toLocaleString([], {
                                 month: 'short',
                                 day: 'numeric',
                                 hour: 'numeric',
@@ -1394,68 +1393,17 @@ function renderChart(history) {
     });
 }
 
-function formatXAxisTick(history, index, timeFormat) {
-    const tickIndexes = getXAxisTickIndexes(history.length);
-    if (!tickIndexes.has(index)) {
-        return '';
-    }
-
-    const timestamp = history[index]?.timestamp;
-    if (!timestamp) {
-        return '';
-    }
-
-    const spanMs = Math.max(0, history[history.length - 1].timestamp - history[0].timestamp);
+function formatTimestampTick(timestamp, spanMs, timeFormat) {
     const date = new Date(timestamp);
     const hour12 = (timeFormat || '12h') !== '24h';
 
     if (spanMs < 12 * 60 * 60 * 1000) {
-        return date.toLocaleTimeString([], {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12
-        });
+        return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12 });
     }
-
     if (spanMs < 48 * 60 * 60 * 1000) {
-        return date.toLocaleString([], {
-            weekday: 'short',
-            hour: 'numeric',
-            hour12
-        });
+        return date.toLocaleString([], { weekday: 'short', hour: 'numeric', hour12 });
     }
-
-    return date.toLocaleDateString([], {
-        month: 'short',
-        day: 'numeric'
-    });
-}
-
-function getXAxisTickIndexes(length) {
-    const indexes = new Set();
-    if (length <= 0) {
-        return indexes;
-    }
-
-    indexes.add(0);
-    if (length === 1) {
-        return indexes;
-    }
-
-    const targetTickCount = Math.min(5, length);
-    const lastIndex = length - 1;
-    indexes.add(lastIndex);
-
-    if (targetTickCount <= 2) {
-        return indexes;
-    }
-
-    const interval = lastIndex / (targetTickCount - 1);
-    for (let i = 1; i < targetTickCount - 1; i += 1) {
-        indexes.add(Math.round(interval * i));
-    }
-
-    return indexes;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 // Add spinning animation for refresh button
