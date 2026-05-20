@@ -63,8 +63,28 @@ const CHART_DAYS = 7;
 const MAX_HISTORY_SAMPLES = 10000; // Cap total samples to prevent unbounded growth
 
 function storeUsageHistory(data) {
+  // Skip write if the session is invalid — a live session always has resets_at timestamps.
+  // Absent timestamps mean the API returned empty/zeroed data (dead session, removed device, etc.)
+  if (!data.five_hour?.resets_at && !data.seven_day?.resets_at) {
+    debugLog('[History] Skipping write — no reset timestamps, likely invalid session data');
+    return;
+  }
+
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+
+  // One-time migration: carry forward legacy single-account history to the per-org key
+  if (organizationId && !store.has(historyKey)) {
+    const legacy = store.get('usageHistory', []);
+    if (legacy.length > 0) {
+      store.set(historyKey, legacy);
+      store.delete('usageHistory');
+      debugLog('[History] Migrated legacy usageHistory →', historyKey);
+    }
+  }
+
   const timestamp = Date.now();
-  let history = store.get('usageHistory', []);
+  let history = store.get(historyKey, []);
 
   history.push({
     timestamp,
@@ -78,12 +98,11 @@ function storeUsageHistory(data) {
   const cutoff = timestamp - (HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   history = history.filter((entry) => entry.timestamp > cutoff);
 
-  // If still over limit, drop oldest samples
   if (history.length > MAX_HISTORY_SAMPLES) {
     history = history.slice(history.length - MAX_HISTORY_SAMPLES);
   }
 
-  store.set('usageHistory', history);
+  store.set(historyKey, history);
 }
 
 // Set session-level User-Agent to avoid Electron detection
@@ -921,7 +940,9 @@ ipcMain.handle('get-app-version', () => {
 });
 
 ipcMain.handle('get-usage-history', () => {
-  const history = store.get('usageHistory', []);
+  const organizationId = store.get('organizationId');
+  const historyKey = organizationId ? `usageHistory_${organizationId}` : 'usageHistory';
+  const history = store.get(historyKey, []);
   const cutoff = Date.now() - (CHART_DAYS * 24 * 60 * 60 * 1000);
   return history
     .filter((entry) => entry.timestamp > cutoff)
