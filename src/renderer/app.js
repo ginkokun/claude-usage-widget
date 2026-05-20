@@ -1339,7 +1339,7 @@ function renderChart(history) {
                     min: history[0].timestamp,
                     max: history[history.length - 1].timestamp,
                     ticks: {
-                        maxTicksLimit: 5,
+                        stepSize: 86400000,
                         maxRotation: 0,
                         minRotation: 0,
                         font: {
