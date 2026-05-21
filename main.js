@@ -81,6 +81,9 @@ function storeUsageHistory(data) {
     session: data.five_hour?.utilization || 0,
     weekly: data.seven_day?.utilization || 0,
     sonnet: data.seven_day_sonnet?.utilization || 0,
+    opus: data.seven_day_opus?.utilization || 0,
+    cowork: data.seven_day_cowork?.utilization || data.seven_day_omelette?.utilization || 0,
+    oauthApps: data.seven_day_oauth_apps?.utilization || 0,
     extraUsage: data.extra_usage?.utilization || 0
   });
 

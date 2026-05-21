@@ -15,6 +15,8 @@ This file is tracked in the repo and visible to everyone.
 | `feature/chart-time-scale` | Proportional time-scale X-axis for usage graph |
 | `fix/account-history-isolation` | Per-account history isolation, invalid session write guard, stale data pruning |
 | `design/settings-column-reorder` | Settings panel right-column reorder |
+| `fix/chart-axis-bounds` | Clamp chart X-axis to actual data range; stable daily tick labels |
+| `feature/extended-usage-fields` | Display Cowork, OAuth Apps, Sonnet, Opus rows and chart lines; fix resets_at blank |
 
 ---
 
@@ -56,6 +58,30 @@ A startup pruner scans all per-account history keys and removes entries older th
 
 **Settings panel right-column reorder**
 The right column of the settings panel now reads top to bottom: Hide from Taskbar, Show tray stats, Usage Alerts, Organization (when visible). Previously Show tray stats was separated from the other toggles and the org selector had its own standalone row at the bottom. The org selector now shares the Theme row, removing a redundant row from the layout.
+
+---
+
+### fix/chart-axis-bounds
+
+**Stable chart X-axis with correct date range**
+The usage graph X-axis now clamps exactly to the data range — no more future dates appearing when Chart.js auto-extended the axis beyond the last data point. Daily tick labels are generated using calendar day arithmetic (`setDate(d + 1)`) rather than fixed millisecond steps, so labels stay stable across auto-refreshes regardless of when data was collected.
+
+---
+
+### feature/extended-usage-fields
+
+**Extended API usage fields: Cowork, OAuth Apps, Sonnet, Opus**
+The widget now displays rows and graph lines for additional API fields returned by some account types:
+
+- **Cowork (7d)** — shown in cyan. Handles accounts that return this data under the internal `seven_day_omelette` field name by normalizing it to `seven_day_cowork` before rendering.
+- **OAuth Apps (7d)** — shown in orange.
+- **Sonnet (7d)** — shown in rose/pink. Fixes a pre-existing color conflict where this row used the same blue as the Weekly bar.
+- **Opus (7d)** — shown in amber.
+
+All four rows and chart lines only appear when the API returns non-null data for that field, so users on plans without model-level breakdowns see no change.
+
+**Fix: Resets At blank for all extra rows**
+The reset date text (e.g. "Resets May 27") was never being populated for any extra row — the span was created but left empty. All extra rows now correctly display their reset date using the same `formatResetsAt` logic as the main session and weekly rows.
 
 ---
 
