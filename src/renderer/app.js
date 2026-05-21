@@ -546,10 +546,10 @@ function formatCurrency(amountCents, currencyCode) {
 
 // Extra row label mapping for API fields
 const EXTRA_ROW_CONFIG = {
-    seven_day_sonnet: { label: 'Sonnet (7d)', color: 'weekly' },
+    seven_day_sonnet: { label: 'Sonnet (7d)', color: 'sonnet' },
     seven_day_opus: { label: 'Opus (7d)', color: 'opus' },
-    seven_day_cowork: { label: 'Cowork (7d)', color: 'weekly' },
-    seven_day_oauth_apps: { label: 'OAuth Apps (7d)', color: 'weekly' },
+    seven_day_cowork: { label: 'Cowork (7d)', color: 'cowork' },
+    seven_day_oauth_apps: { label: 'OAuth Apps (7d)', color: 'oauth' },
     extra_usage: { label: 'Extra Usage', color: 'extra' },
 };
 
@@ -706,6 +706,10 @@ function buildExtraRows(data) {
 
             const resetsText = document.createElement('span');
             resetsText.className = 'resets-at-text';
+            if (resetsAt) {
+                const settings = window._cachedSettings || {};
+                resetsText.textContent = formatResetsAt(resetsAt, true, settings.timeFormat || '12h', settings.weeklyDateFormat || 'date');
+            }
             row.appendChild(resetsText);
         }
 
@@ -755,8 +759,15 @@ function resizeWidget(bannerVisible) {
     window.electronAPI.resizeWindow(totalHeight);
 }
 
+function normalizeUsageData(data) {
+    if (!data.seven_day_cowork && data.seven_day_omelette) {
+        data.seven_day_cowork = data.seven_day_omelette;
+    }
+    return data;
+}
+
 function updateUI(data) {
-    latestUsageData = data;
+    latestUsageData = normalizeUsageData(data);
 
     showMainContent();
     buildExtraRows(data);
@@ -1254,10 +1265,16 @@ function renderChart(history) {
     if (usageChart) usageChart.destroy();
 
     const showSonnet = isExpanded && !!latestUsageData?.seven_day_sonnet;
+    const showOpus = isExpanded && !!latestUsageData?.seven_day_opus;
+    const showCowork = isExpanded && !!latestUsageData?.seven_day_cowork;
+    const showOAuthApps = isExpanded && !!latestUsageData?.seven_day_oauth_apps;
     const showExtraUsage = isExpanded && !!latestUsageData?.extra_usage;
     const allValues = history.flatMap((entry) => {
         const values = [entry.session, entry.weekly];
         if (showSonnet) values.push(entry.sonnet || 0);
+        if (showOpus) values.push(entry.opus || 0);
+        if (showCowork) values.push(entry.cowork || 0);
+        if (showOAuthApps) values.push(entry.oauthApps || 0);
         if (showExtraUsage) values.push(entry.extraUsage || 0);
         return values;
     });
@@ -1292,15 +1309,66 @@ function renderChart(history) {
         const sonnetData = history.map((entry) => entry.sonnet || 0);
         if (sonnetData.some((value) => value > 0)) {
             datasets.push({
-            label: 'Sonnet',
-            data: history.map((entry) => ({ x: entry.timestamp, y: entry.sonnet || 0 })),
-            borderColor: '#10b981',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            stepped: true,
-            pointRadius: 0,
-            pointHoverRadius: 3,
-            pointHitRadius: 10
+                label: 'Sonnet',
+                data: history.map((entry) => ({ x: entry.timestamp, y: entry.sonnet || 0 })),
+                borderColor: '#f43f5e',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                stepped: true,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
+            });
+        }
+    }
+
+    if (showOpus) {
+        const opusData = history.map((entry) => entry.opus || 0);
+        if (opusData.some((value) => value > 0)) {
+            datasets.push({
+                label: 'Opus',
+                data: history.map((entry) => ({ x: entry.timestamp, y: entry.opus || 0 })),
+                borderColor: '#f59e0b',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                stepped: true,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
+            });
+        }
+    }
+
+    if (showCowork) {
+        const coworkData = history.map((entry) => entry.cowork || 0);
+        if (coworkData.some((value) => value > 0)) {
+            datasets.push({
+                label: 'Cowork',
+                data: history.map((entry) => ({ x: entry.timestamp, y: entry.cowork || 0 })),
+                borderColor: '#06b6d4',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                stepped: true,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
+            });
+        }
+    }
+
+    if (showOAuthApps) {
+        const oauthAppsData = history.map((entry) => entry.oauthApps || 0);
+        if (oauthAppsData.some((value) => value > 0)) {
+            datasets.push({
+                label: 'OAuth Apps',
+                data: history.map((entry) => ({ x: entry.timestamp, y: entry.oauthApps || 0 })),
+                borderColor: '#f97316',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                stepped: true,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
             });
         }
     }
