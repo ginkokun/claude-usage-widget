@@ -664,6 +664,11 @@ body.theme-light .graph-btn.active {
     box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
 }
 
+.progress-fill.design {
+    background: linear-gradient(90deg, #92400e 0%, #b45309 100%);
+    box-shadow: 0 0 10px rgba(146, 64, 14, 0.3);
+}
+
 .progress-fill.oauth {
     background: linear-gradient(90deg, #f97316 0%, #fb923c 100%);
     box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
@@ -726,6 +731,10 @@ body.theme-light .graph-btn.active {
 
 .timer-progress.cowork {
     stroke: #06b6d4;
+}
+
+.timer-progress.design {
+    stroke: #92400e;
 }
 
 .timer-progress.oauth {

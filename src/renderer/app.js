@@ -549,6 +549,7 @@ const EXTRA_ROW_CONFIG = {
     seven_day_sonnet: { label: 'Sonnet (7d)', color: 'sonnet' },
     seven_day_opus: { label: 'Opus (7d)', color: 'opus' },
     seven_day_cowork: { label: 'Cowork (7d)', color: 'cowork' },
+    seven_day_omelette: { label: 'Design (7d)', color: 'design' },
     seven_day_oauth_apps: { label: 'OAuth Apps (7d)', color: 'oauth' },
     extra_usage: { label: 'Extra Usage', color: 'extra' },
 };
@@ -760,9 +761,6 @@ function resizeWidget(bannerVisible) {
 }
 
 function normalizeUsageData(data) {
-    if (!data.seven_day_cowork && data.seven_day_omelette) {
-        data.seven_day_cowork = data.seven_day_omelette;
-    }
     return data;
 }
 
@@ -1267,6 +1265,7 @@ function renderChart(history) {
     const showSonnet = isExpanded && !!latestUsageData?.seven_day_sonnet;
     const showOpus = isExpanded && !!latestUsageData?.seven_day_opus;
     const showCowork = isExpanded && !!latestUsageData?.seven_day_cowork;
+    const showDesign = isExpanded && !!latestUsageData?.seven_day_omelette;
     const showOAuthApps = isExpanded && !!latestUsageData?.seven_day_oauth_apps;
     const showExtraUsage = isExpanded && !!latestUsageData?.extra_usage;
     const allValues = history.flatMap((entry) => {
@@ -1274,6 +1273,7 @@ function renderChart(history) {
         if (showSonnet) values.push(entry.sonnet || 0);
         if (showOpus) values.push(entry.opus || 0);
         if (showCowork) values.push(entry.cowork || 0);
+        if (showDesign) values.push(entry.design || 0);
         if (showOAuthApps) values.push(entry.oauthApps || 0);
         if (showExtraUsage) values.push(entry.extraUsage || 0);
         return values;
@@ -1346,6 +1346,23 @@ function renderChart(history) {
                 label: 'Cowork',
                 data: history.map((entry) => ({ x: entry.timestamp, y: entry.cowork || 0 })),
                 borderColor: '#06b6d4',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                stepped: true,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                pointHitRadius: 10
+            });
+        }
+    }
+
+    if (showDesign) {
+        const designData = history.map((entry) => entry.design || 0);
+        if (designData.some((value) => value > 0)) {
+            datasets.push({
+                label: 'Design',
+                data: history.map((entry) => ({ x: entry.timestamp, y: entry.design || 0 })),
+                borderColor: '#92400e',
                 backgroundColor: 'transparent',
                 borderWidth: 2,
                 stepped: true,
