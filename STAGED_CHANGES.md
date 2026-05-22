@@ -19,6 +19,7 @@ This file is tracked in the repo and visible to everyone.
 | `feature/extended-usage-fields` | Display Cowork, OAuth Apps, Sonnet, Opus rows and chart lines; fix resets_at blank |
 | `fix/rc-version-update-alert` | Pre-release tags never trigger update alert regardless of version number |
 | `fix/claude-design-field` | Add Design (7d) row and chart line for seven_day_omelette field (brown) |
+| PR #64 (irishpolyglot) | Reduce countdown interval from 1s to 30s — ~20x CPU reduction on idle |
 
 ---
 
@@ -98,6 +99,13 @@ The update check now immediately returns false if the remote version has any pre
 
 **Add Design (7d) row and chart line**
 The `seven_day_omelette` API field was previously (incorrectly) aliased to Cowork. It is now correctly mapped as its own "Design (7d)" row in brown, with history tracking and a chart line. The erroneous normalization has been removed so Cowork and Design are fully independent.
+
+---
+
+### PR #64 — irishpolyglot
+
+**Reduce countdown polling interval from 1s to 30s**
+The `startCountdown()` interval was reduced from 1000ms to 30000ms. Since the timer display only shows minute-level precision, ticking every second was triggering unnecessary Electron repaints with no visible benefit. Contributor measured approximately 20x reduction in idle CPU usage (from ~20% to ~1%) on Linux. New data from API fetches still displays immediately — the countdown only keeps the timer ticking between polls.
 
 ---
 
