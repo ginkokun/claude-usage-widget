@@ -265,4 +265,10 @@ Special thanks to these contributors who have improved the widget:
 
 ---
 
+## License
+
+This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
+
+---
+
 *Built with Electron · [Releases](../../releases) · [Discussions](../../discussions)*
