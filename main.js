@@ -921,7 +921,12 @@ ipcMain.on('minimize-window', () => {
 });
 
 ipcMain.on('close-window', () => {
-  app.quit();
+  const showTrayStats = store.get('settings.showTrayStats', false);
+  if (showTrayStats && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  } else {
+    app.quit();
+  }
 });
 
 ipcMain.on('resize-window', (event, height) => {

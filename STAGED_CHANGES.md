@@ -21,6 +21,7 @@ This file is tracked in the repo and visible to everyone.
 | `fix/claude-design-field` | Add Design (7d) row and chart line for seven_day_omelette field (brown) |
 | PR #64 (irishpolyglot) | Reduce countdown interval from 1s to 30s — ~20x CPU reduction on idle |
 | `fix/ci-prerelease-and-cert-import` | Auto-detect prerelease from tag name across all platform workflows; fix macOS cert import secret expansion bug |
+| `fix/close-to-tray-when-tray-enabled` | Hide window to tray on close when Show Tray Stats is enabled; quit as normal when tray is off |
 
 ---
 
@@ -122,6 +123,15 @@ The previous `echo '${{ secrets.CSC_LINK }}'` used single quotes, which prevente
 The macOS cert import step now checks whether signing secrets are configured and exits cleanly if they are not, rather than failing the build. This allows unsigned DMGs to be produced in forks or environments without certificates.
 
 Co-authored-by: GTRows <74116529+GTRows@users.noreply.github.com>
+
+---
+
+### fix/close-to-tray-when-tray-enabled
+
+**Hide to tray on close when tray stats are enabled**
+When Show Tray Stats is enabled, clicking the close button now hides the window to the tray instead of quitting the app. When tray stats are disabled, close behavior is unchanged — the app quits as before.
+
+No new setting or UI element was added. The behavior is gated entirely on the existing Show Tray Stats toggle. The tray context menu Exit option continues to quit the app in all cases, so there is always a clear path to fully exit.
 
 ---
 
