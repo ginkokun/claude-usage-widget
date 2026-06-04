@@ -22,6 +22,7 @@ This file is tracked in the repo and visible to everyone.
 | PR #64 (irishpolyglot) | Reduce countdown interval from 1s to 30s — ~20x CPU reduction on idle |
 | `fix/ci-prerelease-and-cert-import` | Auto-detect prerelease from tag name across all platform workflows; fix macOS cert import secret expansion bug |
 | `fix/close-to-tray-when-tray-enabled` | Hide window to tray on close when Show Tray Stats is enabled; quit as normal when tray is off |
+| `fix/login-screen-clipped` | Resize window to 360px in showLoginRequired() so Log in and Manual buttons are reachable (issue #71) |
 
 ---
 
@@ -132,6 +133,17 @@ Co-authored-by: GTRows <74116529+GTRows@users.noreply.github.com>
 When Show Tray Stats is enabled, clicking the close button now hides the window to the tray instead of quitting the app. When tray stats are disabled, close behavior is unchanged — the app quits as before.
 
 No new setting or UI element was added. The behavior is gated entirely on the existing Show Tray Stats toggle. The tray context menu Exit option continues to quit the app in all cases, so there is always a clear path to fully exit.
+
+---
+
+### fix/login-screen-clipped
+
+**Login screen buttons unreachable on fresh install / after logout (issue #71)**
+The login screen was never resizing the window from the default 155px widget height, causing the "Log in" and "Manual" buttons to render below the visible area. Since the window is frameless and non-resizable, users had no way to recover and were stuck. A `resizeWindow(360)` call was added at the end of `showLoginRequired()` to match the approach used by all other UI state transitions.
+
+Reported and root-caused by Geozstevenzz with full reproduction steps, environment details, and a verified fix.
+
+Co-authored-by: Geozstevenzz <21692161+Geozstevenzz@users.noreply.github.com>
 
 ---
 
