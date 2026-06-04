@@ -1213,6 +1213,10 @@ function showLoginRequired() {
     alertFired.session_danger = false;
     alertFired.weekly_warn = false;
     alertFired.weekly_danger = false;
+    // Resize window to fit login content — without this the window stays at
+    // the default 155px widget height and the "Log in"/"Manual" buttons are
+    // clipped off-screen and unreachable on a frameless, non-resizable window.
+    window.electronAPI.resizeWindow(360);
 }
 
 function showMainContent() {
