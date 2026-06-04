@@ -20,6 +20,7 @@ This file is tracked in the repo and visible to everyone.
 | `fix/rc-version-update-alert` | Pre-release tags never trigger update alert regardless of version number |
 | `fix/claude-design-field` | Add Design (7d) row and chart line for seven_day_omelette field (brown) |
 | PR #64 (irishpolyglot) | Reduce countdown interval from 1s to 30s — ~20x CPU reduction on idle |
+| `fix/ci-prerelease-and-cert-import` | Auto-detect prerelease from tag name across all platform workflows; fix macOS cert import secret expansion bug |
 
 ---
 
@@ -106,6 +107,21 @@ The `seven_day_omelette` API field was previously (incorrectly) aliased to Cowor
 
 **Reduce countdown polling interval from 1s to 30s**
 The `startCountdown()` interval was reduced from 1000ms to 30000ms. Since the timer display only shows minute-level precision, ticking every second was triggering unnecessary Electron repaints with no visible benefit. Contributor measured approximately 20x reduction in idle CPU usage (from ~20% to ~1%) on Linux. New data from API fetches still displays immediately — the countdown only keeps the timer ticking between polls.
+
+---
+
+### fix/ci-prerelease-and-cert-import
+
+**Auto-detect prerelease status from tag name**
+All three platform workflows (`build-macos.yml`, `build-windows.yml`, `build-linux.yml`) previously hardcoded `prerelease: true`, meaning every release — including stable ones — was marked as pre-release unless manually corrected after the fact. The value is now derived from the tag name: tags containing a hyphen (e.g. `v1.7.1-rc.1`) are marked as pre-release automatically; tags without one (e.g. `v1.7.1`) are marked as stable. This removes a manual step from the release process.
+
+**Fix macOS certificate import secret expansion bug**
+The previous `echo '${{ secrets.CSC_LINK }}'` used single quotes, which prevented GitHub Actions from expanding the expression — causing the literal string to be written to the file instead of the secret value. Signing would silently fail as a result. Fixed by moving the secrets to `env` vars and using `printf '%s' "$CSC_LINK"` which correctly reads the environment variable.
+
+**Add signing guard for unsigned builds**
+The macOS cert import step now checks whether signing secrets are configured and exits cleanly if they are not, rather than failing the build. This allows unsigned DMGs to be produced in forks or environments without certificates.
+
+Co-authored-by: GTRows <74116529+GTRows@users.noreply.github.com>
 
 ---
 
