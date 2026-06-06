@@ -23,6 +23,7 @@ This file is tracked in the repo and visible to everyone.
 | `fix/ci-prerelease-and-cert-import` | Auto-detect prerelease from tag name across all platform workflows; fix macOS cert import secret expansion bug |
 | `fix/close-to-tray-when-tray-enabled` | Hide window to tray on close when Show Tray Stats is enabled; quit as normal when tray is off |
 | `fix/login-screen-clipped` | Resize window to 360px in showLoginRequired() so Log in and Manual buttons are reachable (issue #71) |
+| `fix/portable-autostart` | Disable Launch at startup toggle in portable mode; add Windows startup folder instructions to README (issue #80, reported by wowthur) |
 
 ---
 
@@ -146,6 +147,18 @@ Reported and root-caused by Geozstevenzz with full reproduction steps, environme
 Co-authored-by: Geozstevenzz <21692161+Geozstevenzz@users.noreply.github.com>
 
 **README:** Add @Geozstevenzz to the Contributors section before cutting 1.7.5 release.
+
+---
+
+### fix/portable-autostart
+
+**Disable Launch at startup in portable mode (issue #80)**
+
+When running the portable `.exe` on Windows, the Launch at startup toggle is now disabled and replaced with a note explaining that portable mode doesn't support registry-based autorun. This is by design — the portable exe filename includes the version number, so any registry entry would break silently after an update.
+
+**Instead**, users can use the Windows Startup folder: press `Win+R`, type `shell:startup`, and drop the portable `.exe` in. To update, copy the new version in and delete the old one. Instructions added to the README.
+
+Thanks to @wowthur for reporting this and providing clear reproduction details (issue #80).
 
 ---
 

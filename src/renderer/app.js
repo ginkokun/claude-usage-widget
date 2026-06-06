@@ -1530,14 +1530,19 @@ let dangerThreshold = 90;
 async function loadSettings() {
     const settings = await window.electronAPI.getSettings();
     const isLinux = window.electronAPI.platform === 'linux';
+    const isPortable = window.electronAPI.isPortable;
+    const autoStartUnsupported = isLinux || isPortable;
 
-    elements.autoStartToggle.checked = isLinux ? false : settings.autoStart;
-    elements.autoStartToggle.disabled = isLinux;
+    elements.autoStartToggle.checked = autoStartUnsupported ? false : settings.autoStart;
+    elements.autoStartToggle.disabled = autoStartUnsupported;
     if (elements.autoStartCol) {
-        elements.autoStartCol.classList.toggle('settings-col-disabled', isLinux);
+        elements.autoStartCol.classList.toggle('settings-col-disabled', autoStartUnsupported);
     }
     if (elements.autoStartHint) {
-        elements.autoStartHint.style.display = isLinux ? 'inline' : 'none';
+        elements.autoStartHint.style.display = autoStartUnsupported ? 'inline' : 'none';
+        elements.autoStartHint.textContent = isPortable
+            ? 'Not supported in portable mode!'
+            : 'Not supported on Linux';
     }
     elements.minimizeToTrayToggle.checked = settings.minimizeToTray;
     elements.alwaysOnTopToggle.checked = settings.alwaysOnTop;
@@ -1583,7 +1588,7 @@ async function saveSettings() {
     }
 
     const settings = {
-        autoStart: window.electronAPI.platform === 'linux' ? false : elements.autoStartToggle.checked,
+        autoStart: (window.electronAPI.platform === 'linux' || window.electronAPI.isPortable) ? false : elements.autoStartToggle.checked,
         minimizeToTray: elements.minimizeToTrayToggle.checked,
         alwaysOnTop: elements.alwaysOnTopToggle.checked,
         showTrayStats: elements.showTrayStatsToggle.checked,

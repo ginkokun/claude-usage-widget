@@ -928,8 +928,8 @@ body.theme-light .settings-disclaimer {
 .settings-row-hint {
     color: #8f8fa0;
     font-size: 10px;
+    font-weight: bold;
     line-height: 1.2;
-    max-width: 78px;
 }
 
 .settings-row-label {

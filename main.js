@@ -1040,9 +1040,13 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.expandedOpen', settings.expandedOpen);
   store.set('settings.showTrayStats', settings.showTrayStats);
 
+  const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
+
   // openAtLogin is not supported on Linux — Electron silently ignores it.
   // Skip the call entirely to avoid misleading behaviour.
-  if (supportsLoginItems) {
+  // Also skip for portable builds — autorun via registry is unreliable when the
+  // exe path changes with each version. Users should use shell:startup instead.
+  if (supportsLoginItems && !isPortable) {
     app.setLoginItemSettings({
       openAtLogin: autoStart,
       ...(process.platform !== 'darwin' && { path: app.getPath('exe') })
