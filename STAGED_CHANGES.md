@@ -1,4 +1,4 @@
-﻿# Staged Changes
+# Staged Changes
 
 Changes accumulating here have already been merged into `develop`.
 We keep track of these changes/fixes/features and when we have enough for a new release we decide on the next version number.

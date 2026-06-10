@@ -1,4 +1,4 @@
-﻿# Claude Usage Widget v1.7.X Release History
+# Claude Usage Widget v1.7.X Release History
 
 This document consolidates all release notes for the 1.7.x release series.
 
