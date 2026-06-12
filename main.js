@@ -7,37 +7,47 @@ const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-wind
 const GITHUB_OWNER = 'SlavomirDurej';
 const GITHUB_REPO = 'claude-usage-widget';
 
-// Migration: Handle old encrypted config files from v1.7.0 and earlier
-// Must happen BEFORE creating Store instance to prevent parse errors
+// Profile isolation: --profile=<name> launches a fully separate instance with its own
+// session, cookies, and settings. Must be set before anything reads app.getPath('userData').
 const fs = require('fs');
 const os = require('os');
-
-// electron-store uses different paths per platform
-let configPath;
-if (process.platform === 'darwin') {
-  configPath = path.join(os.homedir(), 'Library', 'Application Support', 'claude-usage-widget', 'config.json');
-} else if (process.platform === 'win32') {
-  configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'claude-usage-widget', 'config.json');
-} else {
-  // Linux
-  configPath = path.join(os.homedir(), '.config', 'claude-usage-widget', 'config.json');
+const profileArg = process.argv.find(a => a.startsWith('--profile='));
+if (profileArg) {
+  const profileName = profileArg.split('=')[1].replace(/[^a-zA-Z0-9_-]/g, '_');
+  const profilePath = path.join(app.getPath('userData'), 'profiles', profileName);
+  app.setPath('userData', profilePath);
 }
 
-try {
-  if (fs.existsSync(configPath)) {
-    const rawData = fs.readFileSync(configPath, 'utf-8');
-    // Check if file looks encrypted (contains non-JSON garbage or doesn't start with {)
-    if (rawData.includes('\u0000') || !rawData.trim().startsWith('{')) {
-      console.log('[Migration] Detected old encrypted config from v1.7.0, deleting for fresh start');
-      fs.unlinkSync(configPath);
-    }
+// Migration: Handle old encrypted config files from v1.7.0 and earlier
+// Must happen BEFORE creating Store instance to prevent parse errors.
+// Skipped for profile instances — they are always fresh installs.
+if (!profileArg) {
+  let configPath;
+  if (process.platform === 'darwin') {
+    configPath = path.join(os.homedir(), 'Library', 'Application Support', 'claude-usage-widget', 'config.json');
+  } else if (process.platform === 'win32') {
+    configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'claude-usage-widget', 'config.json');
+  } else {
+    // Linux
+    configPath = path.join(os.homedir(), '.config', 'claude-usage-widget', 'config.json');
   }
-} catch (err) {
-  console.error('[Migration] Error checking config file:', err.message);
-  // If we can't read it, try to delete it
+
   try {
-    if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
-  } catch {}
+    if (fs.existsSync(configPath)) {
+      const rawData = fs.readFileSync(configPath, 'utf-8');
+      // Check if file looks encrypted (contains non-JSON garbage or doesn't start with {)
+      if (rawData.includes('\u0000') || !rawData.trim().startsWith('{')) {
+        console.log('[Migration] Detected old encrypted config from v1.7.0, deleting for fresh start');
+        fs.unlinkSync(configPath);
+      }
+    }
+  } catch (err) {
+    console.error('[Migration] Error checking config file:', err.message);
+    // If we can't read it, try to delete it
+    try {
+      if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
+    } catch {}
+  }
 }
 
 // Non-sensitive settings storage (no encryption needed)
