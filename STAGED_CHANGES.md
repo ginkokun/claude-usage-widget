@@ -12,9 +12,12 @@ This file is tracked in the repo and visible to everyone.
 | Branch | Description |
 |--------|-------------|
 | `fix/ci-actions-node20` | Bump actions/checkout and actions/setup-node to v5; Node.js matrix 18→20 |
+| `feature/profile-flag` | Add `--profile=<name>` flag for isolated multi-account sessions |
 
 ---
 
 ## Changes
+
+- **Multi-account support (power-user flag):** Launching with `--profile=<name>` isolates the instance to its own userData subfolder, giving it a completely separate Electron session, cookies, and settings. Enables two accounts to run side-by-side without interfering. Works for both installed and portable builds.
 
 *Add new entries above this line as additional branches are staged.*
