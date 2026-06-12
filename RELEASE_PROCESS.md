@@ -1,108 +1,85 @@
 # Release Process
 
-This document describes the end-to-end process for cutting a release of claude-usage-widget.
+## Branch Rules (Non-Negotiable)
+
+- **`main`** — only touched during a formal release. Never commit directly. Never merge from develop except at release time.
+- **`develop`** — integration branch. All feature/fix branches merge here first.
+- **Feature/fix branches** — always cut from `develop`, always merge back to `develop`.
+- **RC builds** — tagged from `develop`. Main is never involved.
 
 ---
 
-## Branching Model
+## RC / Pre-Release Build
 
-- All work goes to feature/fix branches off `develop`
-- `develop` accumulates changes tracked in `STAGED_CHANGES.md`
-- `main` only receives changes via formal release merges
-- PRs targeting `main` are always closed and redirected to `develop`
+Use this when you want to produce real installable artifacts for testing without cutting a formal release.
 
----
+**Prerequisites:** feature branch already merged to `develop` and pushed to origin.
 
-## During Development
-
-1. **Work in feature/fix branches** off `develop`
-2. **Test locally** with `npm start` before pushing anything
-3. **Merge to `develop`** when ready
-4. **Update `STAGED_CHANGES.md`** — add the branch and a description to the table, and a full entry under Changes
-5. **Do not write any files to a sub-fork until changes are agreed to work locally**
-
----
-
-## Deciding to Release
-
-When enough changes have accumulated in `develop`, review `STAGED_CHANGES.md` and decide:
-- Is there enough for a release?
-- What version increment is appropriate? (patch = fixes/minor improvements, minor = visible new features, major = significant overhaul)
-- `package.json` on `develop` should be at `X.Y.Z-dev` between releases
-
----
-
-## Release Steps
-
-### 1. Prepare files on `develop`
-
-- **Bump `package.json`** from `X.Y.Z-dev` to `X.Y.Z`
-  - Write BOM-free: `[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))`
-- **Add release entry to `RELEASE_NOTES_1.7.X.md`** at the top (above previous releases)
-- **Clear `STAGED_CHANGES.md`** — reset the table and Changes section, keep the header
-- Commit all three: `chore: release vX.Y.Z`
-- Push `develop`
-
-### 2. Merge to `main`
-
-```bash
-git checkout main
-git merge --no-ff develop -m "release: merge develop into main for vX.Y.Z"
-```
-
-### 3. Push `main` first — verify CI passes
-
-```bash
-git push origin main
-```
-
-Watch GitHub Actions. All three platform builds (Windows, macOS, Linux) must pass before proceeding. If a build fails, fix on `develop`, push develop, then re-merge to main and push again.
-
-### 4. Tag and push — only after main CI is green
-
-```bash
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-The tag push triggers the full release build and uploads artifacts to the GitHub Release.
-
-### 5. Bump `develop` to next dev version
-
-```bash
-# Back on develop, bump package.json to X.Y.(Z+1)-dev
-git checkout develop
-# edit package.json
-git commit -m "chore: mark develop as X.Y.(Z+1)-dev"
-git push origin develop
-```
-
-### 6. Clean up merged branches
-
-```bash
-git push origin --delete fix/branch-name feature/branch-name
-```
-
-Only `main` and `develop` should remain on origin after a release.
-
----
-
-## If a Build Fails After Tagging
-
-1. Fix the issue on `develop`, push
-2. Delete the tag locally and remotely:
-   ```bash
-   git tag -d vX.Y.Z
-   git push origin :refs/tags/vX.Y.Z
+1. **Tag `develop` directly:**
    ```
-3. Re-merge develop into main, push main, verify CI, then retag
+   git checkout develop
+   git tag -a vX.Y.Z-rc.N -m "vX.Y.Z-rc.N - RC build for <feature description>"
+   git push origin vX.Y.Z-rc.N
+   ```
+
+2. **Verify CI triggers** on all three platform workflows from the tag push.
+
+3. **GitHub will create a pre-release** — confirm it is marked `prerelease: true` and `draft: false`.
+
+4. **Test the builds** — download and test Windows (installer + portable), macOS, Linux.
+
+5. **If issues found:**
+   - Fix on a new branch off `develop`, merge back to `develop`
+   - Delete the GitHub release first (UI)
+   - Delete the tag: `git push origin :refs/tags/vX.Y.Z-rc.N && git tag -d vX.Y.Z-rc.N`
+   - Increment RC number and repeat from step 1
+
+6. **`main` is never touched during this process.**
+
+---
+
+## Formal Release
+
+Only after RC testing passes and enough changes have accumulated on `develop` to justify a release. Version number agreed upon before starting.
+
+1. **Merge `develop` → `main` locally:**
+   ```
+   git checkout main
+   git merge --no-ff develop -m "release: merge develop into main for vX.Y.Z"
+   ```
+
+2. **Bump version in `package.json`** to `X.Y.Z` (remove `-dev` suffix).
+
+3. **Push `main` and verify CI passes** (no tag yet):
+   ```
+   git push origin main
+   ```
+
+4. **Once CI is green, create and push the annotated release tag:**
+   ```
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+5. **Tag push triggers the three platform builds.** Monitor Actions.
+
+6. **After release, bump `develop` to next dev version:**
+   ```
+   git checkout develop
+   # Update package.json version to X.Y.(Z+1)-dev
+   git add package.json
+   git commit -m "chore: mark develop as X.Y.(Z+1)-dev"
+   git push origin develop
+   ```
 
 ---
 
 ## Important Notes
 
-- **Never push to `main` without explicit confirmation**
-- **`package.json` must be BOM-free** — electron-builder's JSON parser rejects UTF-8 BOM
-- **Pre-release tags** (containing `-`) are auto-detected by CI workflows and marked as pre-release on GitHub
-- **Stable tags** (no `-`) are marked as stable and notify users
-- **Never use `Out-File -Encoding utf8`** in PowerShell for files that tools will parse — use `[System.IO.File]::WriteAllText` with `[System.Text.UTF8Encoding]::new($false)` instead
+- **RC tags never notify stable users** — the update checker ignores any version with a pre-release suffix (rc, beta, alpha).
+- **Never push to `main` for an RC build** — RC tags live on `develop`.
+- **Never commit directly to `main` or `develop`** — always via a branch merge.
+- **Push order for formal releases:** `main` push first to verify CI, then the tag — avoids accumulating failed release job runs.
+- **Orphaned drafts:** If a release job misfires, delete the GitHub release before deleting the tag — otherwise orphaned drafts persist.
+- **BOM-free writes:** Always use `[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))` when writing files via PowerShell — never `Out-File -Encoding utf8`.
+- **`STAGED_CHANGES.md`** accumulates entries per branch. Clear it after each formal release.
