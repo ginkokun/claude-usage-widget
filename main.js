@@ -3,6 +3,7 @@ const path = require('path');
 const https = require('https');
 const Store = require('electron-store');
 const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
+const { pushUsageToRSM4 } = require('./src/push-to-rsm4');
 
 const GITHUB_OWNER = 'SlavomirDurej';
 const GITHUB_REPO = 'claude-usage-widget';
@@ -1017,7 +1018,11 @@ ipcMain.handle('get-settings', () => {
     refreshInterval: store.get('settings.refreshInterval', '300'),
     graphVisible: store.get('settings.graphVisible', false),
     expandedOpen: store.get('settings.expandedOpen', false),
-    showTrayStats: store.get('settings.showTrayStats', false)
+    showTrayStats: store.get('settings.showTrayStats', false),
+    // RSM-4 push (fork feature). URL is non-secret; empty => feature off.
+    rsm4Url: store.get('settings.rsm4Url', ''),
+    // Whether a collector token is stored (the token itself is never returned).
+    rsm4TokenSet: !!(store.get('rsm4Token_encrypted') || store.get('rsm4Token'))
   };
 });
 
@@ -1039,6 +1044,11 @@ ipcMain.handle('save-settings', (event, settings) => {
   store.set('settings.graphVisible', settings.graphVisible);
   store.set('settings.expandedOpen', settings.expandedOpen);
   store.set('settings.showTrayStats', settings.showTrayStats);
+  // RSM-4 ingest URL (non-secret). The collector token is handled by the
+  // dedicated set-rsm4-token handler so it can be encrypted via safeStorage.
+  if (settings.rsm4Url !== undefined) {
+    store.set('settings.rsm4Url', settings.rsm4Url);
+  }
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
 
@@ -1077,6 +1087,48 @@ ipcMain.handle('save-settings', (event, settings) => {
   }
 
   return true;
+});
+
+// --- RSM-4 collector token (fork feature) ---------------------------------
+// The token is a secret, so it is stored exactly like the Claude sessionKey:
+// encrypted via safeStorage (OS keychain) when available, with a plain-storage
+// fallback. It is never returned to the renderer — only a boolean "is set".
+
+function getRsm4Token() {
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = store.get('rsm4Token_encrypted');
+    if (encrypted) {
+      try {
+        return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+      } catch (err) {
+        console.error('[RSM-4] Failed to decrypt collector token:', err.message);
+        return null;
+      }
+    }
+    return null;
+  }
+  return store.get('rsm4Token') || null;
+}
+
+ipcMain.handle('set-rsm4-token', (event, token) => {
+  // Empty/blank token clears the stored credential.
+  if (!token || !String(token).trim()) {
+    store.delete('rsm4Token');
+    store.delete('rsm4Token_encrypted');
+    return { ok: true, tokenSet: false };
+  }
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(String(token));
+    store.set('rsm4Token_encrypted', encrypted.toString('base64'));
+    store.delete('rsm4Token'); // remove any legacy plain copy
+  } else {
+    store.set('rsm4Token', String(token));
+  }
+  return { ok: true, tokenSet: true };
+});
+
+ipcMain.handle('has-rsm4-token', () => {
+  return !!(store.get('rsm4Token_encrypted') || store.get('rsm4Token'));
 });
 
 // Open a visible BrowserWindow for the user to log in to Claude.ai.
@@ -1391,6 +1443,20 @@ ipcMain.handle('fetch-usage-data', async (event, options = {}) => {
 
   // Update tray icon with current usage data
   updateTrayIcon(data);
+
+  // Optional RSM-4 push (fork feature). OFF when the ingest URL is empty.
+  // Fire-and-forget: piggybacks on this successful usage refresh, never awaited
+  // in a way that could block the response, and never throws (the module
+  // swallows all errors and logs them). One push per successful refresh.
+  const rsm4Url = store.get('settings.rsm4Url', '');
+  if (rsm4Url) {
+    pushUsageToRSM4(data, {
+      url: rsm4Url,
+      token: getRsm4Token(),
+      platform: process.platform,
+      log: debugLog,
+    }).catch((err) => debugLog('[RSM-4] Unexpected push rejection:', err));
+  }
 
   // Re-assert always-on-top after hidden BrowserWindows from fetchViaWindow
   // are destroyed — creating/destroying BrowserWindows can temporarily disrupt

@@ -63,6 +63,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
 
+  // RSM-4 collector token (secret — stored via safeStorage in main, never read back)
+  setRsm4Token: (token) => ipcRenderer.invoke('set-rsm4-token', token),
+  hasRsm4Token: () => ipcRenderer.invoke('has-rsm4-token'),
+
   // Updates
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

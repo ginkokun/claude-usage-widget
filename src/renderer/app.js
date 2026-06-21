@@ -81,6 +81,9 @@ const elements = {
     timeFormat: document.getElementById('timeFormat'),
     weeklyDateFormat: document.getElementById('weeklyDateFormat'),
     refreshInterval: document.getElementById('refreshInterval'),
+    rsm4Url: document.getElementById('rsm4Url'),
+    rsm4Token: document.getElementById('rsm4Token'),
+    rsm4TokenHint: document.getElementById('rsm4TokenHint'),
     orgSelector: document.getElementById('orgSelector'),
     orgSelectorCol: document.getElementById('orgSelectorCol'),
 
@@ -1552,6 +1555,13 @@ async function loadSettings() {
     elements.timeFormat.value = settings.timeFormat || '12h';
     elements.weeklyDateFormat.value = settings.weeklyDateFormat || 'date';
     if (elements.refreshInterval) elements.refreshInterval.value = settings.refreshInterval || '300';
+    // RSM-4 push (fork feature). The token is never read back from main; we only
+    // show whether one is stored and leave the password field blank.
+    if (elements.rsm4Url) elements.rsm4Url.value = settings.rsm4Url || '';
+    if (elements.rsm4Token) elements.rsm4Token.value = '';
+    if (elements.rsm4TokenHint) {
+        elements.rsm4TokenHint.textContent = settings.rsm4TokenSet ? 'Token saved' : 'No token saved';
+    }
     elements.usageAlertsToggle.checked = settings.usageAlerts !== false;
     if (elements.compactModeToggle) elements.compactModeToggle.checked = !!settings.compactMode;
 
@@ -1601,9 +1611,26 @@ async function saveSettings() {
         usageAlerts: elements.usageAlertsToggle.checked,
         compactMode: isCompactMode,
         graphVisible: graphVisible,
-        expandedOpen: isExpanded
+        expandedOpen: isExpanded,
+        // RSM-4 ingest URL (non-secret). Empty string disables the feature.
+        rsm4Url: elements.rsm4Url ? elements.rsm4Url.value.trim() : ''
     };
     await window.electronAPI.saveSettings(settings);
+
+    // Persist the RSM-4 collector token separately (encrypted in main). Only
+    // send it when the user actually typed something — a blank field means
+    // "keep the existing token", so we don't overwrite it on every save.
+    if (elements.rsm4Token && elements.rsm4Token.value.trim()) {
+        try {
+            const res = await window.electronAPI.setRsm4Token(elements.rsm4Token.value.trim());
+            elements.rsm4Token.value = '';
+            if (elements.rsm4TokenHint) {
+                elements.rsm4TokenHint.textContent = res && res.tokenSet ? 'Token saved' : 'No token saved';
+            }
+        } catch (e) {
+            debugLog('Failed to save RSM-4 token', e);
+        }
+    }
     window._cachedSettings = settings;
     applyTheme(settings.theme);
     if (window.electronAPI.platform === 'darwin') {

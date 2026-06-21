@@ -1364,6 +1364,47 @@ body.theme-light .settings-update-link {
     border-color: rgba(255,255,255,0.3);
 }
 
+/* RSM-4 push (fork feature) settings row */
+.settings-row-rsm4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.settings-row-rsm4 .settings-col {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.settings-row-rsm4 .settings-row-label {
+    width: auto;
+}
+
+.settings-text-input {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    color: #e0e0f0;
+    font-size: 11px;
+    padding: 4px 6px;
+    outline: none;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.settings-text-input:hover,
+.settings-text-input:focus {
+    border-color: rgba(255,255,255,0.3);
+}
+
+body.theme-light .settings-text-input {
+    background: rgba(0,0,0,0.05);
+    border-color: rgba(0,0,0,0.15);
+    color: #303050;
+}
+
 body.theme-light .settings-select {
     background: rgba(0,0,0,0.05);
     border-color: rgba(0,0,0,0.15);
