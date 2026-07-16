@@ -49,9 +49,12 @@ its other contents when discussing this feature.
 
 - All native dialogs/launches run fixed AppleScript source via
   `/usr/bin/osascript`; the script text itself never changes at runtime.
-- Any dynamic value (work description, monitor command) is passed as a
-  separate argv item after `--`, never interpolated into the AppleScript or a
-  shell string.
+- The monitor command is the only value passed into AppleScript; it is passed
+  as a separate argv item after `--`, never interpolated into the AppleScript
+  or a shell string. The work description is not passed into AppleScript at
+  all — it is captured by the fixed prompt dialog and returned on stdout, then
+  used only to build the deep link or clipboard payload. It is never
+  interpolated into AppleScript source.
 - No Accessibility automation, no simulated keystrokes, and no auto-send —
   the operator always performs the final submit action.
 - No network calls occur during tests.
@@ -63,9 +66,10 @@ its other contents when discussing this feature.
 Run these without launching the full app or GUI:
 
 ```
-/usr/bin/env node --check main.js
+/opt/homebrew/bin/node --check main.js
+/opt/homebrew/bin/node --test test/*.test.js
 /usr/bin/osascript -e 'display dialog "What are we working on?" default answer "" with title "Relay Station"'
-/bin/ls -la "<relaystationMain repo>/scripts/agent_watch.py"
+/bin/test -f "<relaystationMain repo>/scripts/agent_watch.py"
 ```
 
 The `osascript` command reproduces the fixed prompt dialog in isolation;
@@ -74,13 +78,17 @@ cancel it to confirm no launch occurs on cancel.
 ## Local build/deploy (unsigned, arm64)
 
 ```
-/usr/bin/env npx electron-builder --mac --arm64 --dir
+/opt/homebrew/bin/npm install --no-package-lock
+CSC_IDENTITY_AUTO_DISCOVERY=false /opt/homebrew/bin/npx electron-builder --mac dir --arm64
 ```
 
 This produces an unsigned, non-notarized `arm64` build under `dist/` for
 local testing only — no `sudo`, no code signing, no release notarization.
-To roll back, revert to the last known-good commit SHA and rebuild; keep the
-previous `dist/` artifact until the new build is verified.
+
+Deployment first backs up the currently installed
+`/Applications/Claude-Usage-Widget.app`, then installs the new build. If
+launch or smoke testing fails, the backup is restored in place of the new
+build. The backup is deleted only after the new build is verified to work.
 
 ## Known limitation
 
