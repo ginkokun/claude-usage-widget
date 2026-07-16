@@ -4,6 +4,7 @@
   "description": "Desktop widget for Claude.ai usage monitoring",
   "main": "main.js",
   "scripts": {
+    "test": "node --test test/*.test.js",
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
