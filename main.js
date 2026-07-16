@@ -10,6 +10,7 @@ const {
   isValidDashboardUrl,
   buildLaunchPayload,
   buildMonitorCommand,
+  WORK_DESCRIPTION_MAX_CHARS,
 } = require('./src/relay-agent-control');
 
 const GITHUB_OWNER = 'SlavomirDurej';
@@ -581,8 +582,9 @@ end run
 
 function runOsascript(script, args) {
   return new Promise((resolve, reject) => {
-    execFile('/usr/bin/osascript', ['-e', script, '--', ...(args || [])], (error, stdout) => {
+    execFile('/usr/bin/osascript', ['-e', script, '--', ...(args || [])], (error, stdout, stderr) => {
       if (error) {
+        error.stderr = String(stderr || '').slice(0, 500);
         reject(error);
         return;
       }
@@ -591,13 +593,15 @@ function runOsascript(script, args) {
   });
 }
 
-// Resolves to the trimmed answer, or '' when the dialog was cancelled/failed.
+// Resolves to the trimmed answer, or '' when the dialog was cancelled.
+// Any other osascript failure propagates to the caller.
 async function promptForWorkDescription() {
   try {
     const stdout = await runOsascript(RELAY_PROMPT_SCRIPT);
     return stdout.trim();
-  } catch {
-    return '';
+  } catch (error) {
+    if (String(error.stderr || '').includes('(-128)')) return '';
+    throw error;
   }
 }
 
@@ -613,11 +617,14 @@ function getRelayStationRepoPath() {
 }
 
 async function launchCodexCoordinator() {
-  const workDescription = await promptForWorkDescription();
-  if (!workDescription) return; // cancelled or blank — no launch
   try {
+    const workDescription = await promptForWorkDescription();
+    if (!workDescription) return; // cancelled or blank — no launch
     const payload = buildLaunchPayload('codex', workDescription, getRelayStationRepoPath());
-    if (!payload) return; // over the length limit — no launch
+    if (!payload) {
+      showRelayStationError(`Work description is too long (max ${WORK_DESCRIPTION_MAX_CHARS} characters).`);
+      return;
+    }
     await shell.openExternal(payload.deepLink);
   } catch (error) {
     showRelayStationError(`Failed to launch Codex coordinator: ${error.message}`);
@@ -625,13 +632,19 @@ async function launchCodexCoordinator() {
 }
 
 async function launchClaudeCoordinator() {
-  const workDescription = await promptForWorkDescription();
-  if (!workDescription) return; // cancelled or blank — no launch
   try {
+    const workDescription = await promptForWorkDescription();
+    if (!workDescription) return; // cancelled or blank — no launch
     const payload = buildLaunchPayload('claude', workDescription);
-    if (!payload) return; // over the length limit — no launch
+    if (!payload) {
+      showRelayStationError(`Work description is too long (max ${WORK_DESCRIPTION_MAX_CHARS} characters).`);
+      return;
+    }
     clipboard.writeText(payload.prompt);
-    await shell.openPath('/Applications/Claude.app');
+    const openError = await shell.openPath('/Applications/Claude.app');
+    if (openError) {
+      throw new Error('Claude Desktop could not be opened.');
+    }
     new Notification({ title: 'Relay Station', body: 'Coordinator prompt copied to clipboard.' }).show();
   } catch (error) {
     showRelayStationError(`Failed to launch Claude coordinator: ${error.message}`);
