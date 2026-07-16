@@ -4,6 +4,19 @@ This document consolidates all release notes for the 1.7.x release series.
 
 ---
 
+## v1.7.6
+
+**Released:** July 2026
+
+This release adds the Fleet settings panel, a single control surface for machine fleet configuration.
+
+### What's New
+
+**Fleet settings panel**
+A new settings panel provides one place to configure the widget's machine fleet setup: generate or paste the collision key, set the key id, fleet aggregator URL, and ingest token, and view the local machine_id. Saved values are written to agent_watch's `fleet_config.json`. This complements the existing F-2 fleet outbox transport, which polls the widget outbox and pushes snapshots to the aggregator using this configuration.
+
+---
+
 ## v1.7.5
 
 **Released:** June 2026
