@@ -6,6 +6,14 @@ const Store = require('electron-store');
 const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
 const { pushUsageToRSM4 } = require('./src/push-to-rsm4');
 const {
+  DEFAULT_POLL_INTERVAL_MS: FLEET_POLL_INTERVAL_MS,
+  DEFAULT_HEARTBEAT_INTERVAL_MS: FLEET_HEARTBEAT_INTERVAL_MS,
+  resolveOutboxPath: resolveFleetOutboxPath,
+  createPollState: createFleetPollState,
+  createTransportIdentity: createFleetTransportIdentity,
+  pollFleetOutbox,
+} = require('./src/push-fleet-snapshot');
+const {
   getDefaultConfig,
   isValidDashboardUrl,
   buildLaunchPayload,
@@ -60,6 +68,14 @@ function debugLog(...args) {
 }
 
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// Fleet transport (F-2, fork feature): independent poll of the F-1 safe-snapshot
+// outbox + best-effort push to the fleet aggregator. Wholly separate from the
+// RSM-4 usage push above — its own URL, its own credential, its own timer.
+// The transport identity (emitter_epoch + seq) is minted fresh once per
+// process start and resets whenever the widget restarts.
+const fleetTransportIdentity = createFleetTransportIdentity();
+const fleetPollState = createFleetPollState();
 
 let mainWindow = null;
 let sessionTray = null;  // Tray icon for Session usage
@@ -1182,7 +1198,13 @@ ipcMain.handle('get-settings', () => {
     // RSM-4 push (fork feature). URL is non-secret; empty => feature off.
     rsm4Url: store.get('settings.rsm4Url', ''),
     // Whether a collector token is stored (the token itself is never returned).
-    rsm4TokenSet: !!(store.get('rsm4Token_encrypted') || store.get('rsm4Token'))
+    rsm4TokenSet: !!(store.get('rsm4Token_encrypted') || store.get('rsm4Token')),
+    // Fleet transport (F-2, fork feature). URL is non-secret; empty => feature off.
+    // Wholly separate from rsm4Url above.
+    fleetUrl: store.get('settings.fleetUrl', ''),
+    // Whether a fleet_ingest credential is stored. Fail-closed: this is only
+    // ever true if safeStorage encrypted it — there is no plaintext fallback.
+    fleetTokenSet: !!store.get('fleetToken_encrypted')
   };
 });
 
@@ -1208,6 +1230,12 @@ ipcMain.handle('save-settings', (event, settings) => {
   // dedicated set-rsm4-token handler so it can be encrypted via safeStorage.
   if (settings.rsm4Url !== undefined) {
     store.set('settings.rsm4Url', settings.rsm4Url);
+  }
+  // Fleet aggregator URL (non-secret, F-2). The fleet_ingest credential is
+  // handled by the dedicated set-fleet-token handler, fail-closed via
+  // safeStorage — see below.
+  if (settings.fleetUrl !== undefined) {
+    store.set('settings.fleetUrl', settings.fleetUrl);
   }
 
   const isPortable = process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE;
@@ -1289,6 +1317,43 @@ ipcMain.handle('set-rsm4-token', (event, token) => {
 
 ipcMain.handle('has-rsm4-token', () => {
   return !!(store.get('rsm4Token_encrypted') || store.get('rsm4Token'));
+});
+
+// --- Fleet ingest credential (F-2, fork feature) ---------------------------
+// Wholly separate secret from the RSM-4 token above. Unlike RSM-4's
+// plain-storage fallback, this credential is FAIL CLOSED: if safeStorage is
+// unavailable it is never stored in plaintext, and the fleet transport never
+// pushes at all until safeStorage (and a stored credential) are available.
+
+function getFleetToken() {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  const encrypted = store.get('fleetToken_encrypted');
+  if (!encrypted) return null;
+  try {
+    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+  } catch (err) {
+    console.error('[Fleet] Failed to decrypt ingest token:', err.message);
+    return null;
+  }
+}
+
+ipcMain.handle('set-fleet-token', (event, token) => {
+  // Empty/blank token clears the stored credential.
+  if (!token || !String(token).trim()) {
+    store.delete('fleetToken_encrypted');
+    return { ok: true, tokenSet: false };
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    // Fail closed: never fall back to plaintext storage for this credential.
+    return { ok: false, tokenSet: false, reason: 'safeStorage-unavailable' };
+  }
+  const encrypted = safeStorage.encryptString(String(token));
+  store.set('fleetToken_encrypted', encrypted.toString('base64'));
+  return { ok: true, tokenSet: true };
+});
+
+ipcMain.handle('has-fleet-token', () => {
+  return !!store.get('fleetToken_encrypted');
 });
 
 // Open a visible BrowserWindow for the user to log in to Claude.ai.
@@ -1683,6 +1748,31 @@ app.whenReady().then(async () => {
       }
     }
   }, 5000);
+
+  // Fleet transport (F-2, fork feature): a timer wholly separate from the
+  // usage refresh and the RSM-4 push. Polls the F-1 outbox roughly every 5s
+  // and pushes only on material change, plus a ~30s full-snapshot heartbeat
+  // even when unchanged (pollFleetOutbox owns that cadence decision).
+  setInterval(() => {
+    const fleetUrl = store.get('settings.fleetUrl', '');
+    if (!fleetUrl) return; // feature OFF — no timer work beyond this check.
+    if (!safeStorage.isEncryptionAvailable()) return; // fail closed — no push.
+    const token = getFleetToken();
+    if (!token) return; // no credential provisioned yet — nothing to push.
+
+    pollFleetOutbox({
+      outboxPath: resolveFleetOutboxPath(),
+      state: fleetPollState,
+      now: Date.now(),
+      heartbeatIntervalMs: FLEET_HEARTBEAT_INTERVAL_MS,
+      url: fleetUrl,
+      token,
+      emitterEpoch: fleetTransportIdentity.emitterEpoch,
+      nextSeq: fleetTransportIdentity.nextSeq,
+      platform: process.platform,
+      log: debugLog,
+    }).catch((err) => debugLog('[Fleet] Unexpected poll rejection:', err));
+  }, FLEET_POLL_INTERVAL_MS);
 });
 
 app.on('window-all-closed', () => {

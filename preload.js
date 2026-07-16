@@ -67,6 +67,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setRsm4Token: (token) => ipcRenderer.invoke('set-rsm4-token', token),
   hasRsm4Token: () => ipcRenderer.invoke('has-rsm4-token'),
 
+  // Fleet ingest token (F-2, secret — fail-closed via safeStorage in main, never read back)
+  setFleetToken: (token) => ipcRenderer.invoke('set-fleet-token', token),
+  hasFleetToken: () => ipcRenderer.invoke('has-fleet-token'),
+
   // Updates
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

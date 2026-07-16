@@ -102,3 +102,71 @@ The generated coordinator prompt explicitly asks for narrow cards and bounded
 turns to limit token usage. The Terminal Control Board shows per-task/per-run
 token activity and cache reuse for observability — it is not a billing or
 provider-quota view.
+
+## Fleet transport (F-2)
+
+The widget also carries the fleet layer's transport leg (`AGENT_OBSERVABILITY_FLEET.md`
+in `relaystation_main`, phase F-2): an independent poll of `agent_watch.py`'s
+F-1 safe-snapshot outbox and a best-effort push to the fleet aggregator. This
+is wholly separate from the RSM-4 usage push above — its own setting, its own
+credential, its own timer, its own module (`src/push-fleet-snapshot.js`), and
+its own IPC channels. It never touches the RSM-4 push or its call site.
+
+### Configuration
+
+- `settings.fleetUrl` — the fleet aggregator ingest URL, a non-secret
+  `electron-store` setting mirroring `settings.rsm4Url`. Empty ⇒ the feature
+  is OFF and the poll timer does no work beyond checking this value.
+- The `fleet_ingest` bearer credential is set via the `set-fleet-token` IPC
+  handler (mirroring `set-rsm4-token`) and stored through Electron
+  `safeStorage` (OS-keychain backed) **exactly like** the RSM-4 collector
+  token, with one deliberate difference: it is **fail-closed**. If
+  `safeStorage` is unavailable, `set-fleet-token` refuses to store anything
+  (no plaintext fallback, unlike RSM-4's legacy plain-storage path) and the
+  poll timer skips every tick — no push at all — until `safeStorage` is
+  available and a credential has been provisioned. `has-fleet-token` reports
+  whether a credential is currently stored.
+
+### Outbox path
+
+Resolved identically to `agent_watch.state_dir()`:
+
+```
+base = $AGENT_WATCH_STATE_DIR
+       || $XDG_STATE_HOME/relay-agent-watch
+       || ~/.local/state/relay-agent-watch
+outbox = <base>/fleet_snapshot.json
+```
+
+A missing or corrupt outbox file simply means "nothing to push" — never an
+error, never a thrown exception.
+
+### Poll / heartbeat cadence
+
+A single timer, independent of the usage-refresh timer, ticks roughly every
+**5 seconds**. Each tick reads the outbox, computes a sha256 content hash of
+its canonical (key-sorted) JSON, and pushes the full snapshot only when that
+hash differs from the last **successfully** pushed hash (material-change
+detection). Independently, a full-snapshot **heartbeat** push fires roughly
+every **30 seconds** even when the content is unchanged, for liveness. A
+failed push is **dropped** — there is no queue or retry buffer — so the next
+tick simply re-evaluates and re-sends the current full snapshot.
+
+### `emitter_epoch` / `seq` ownership
+
+The widget — never the F-1 outbox — mints the transport identity: an opaque
+`emitter_epoch` (a fresh UUID) once per process start, and a monotonic `seq`
+counter within it. Both reset on every widget restart. Each push stamps these
+onto the snapshot's machine-heartbeat block before sending.
+
+### Known gaps
+
+- **Windows test leg unrun.** The offline `node --test` suite
+  (`test/push-fleet-snapshot.test.js`) was written to be OS-agnostic
+  (`path.join`, `os.homedir()`, no shell/sleep assumptions) and was run and
+  verified green only on macOS in this session. It has **not** been run on
+  Windows; that leg must still be run on the operator's Windows machine before
+  this is considered fully verified there.
+- **Deployability.** This code lands on the widget's `main` branch; it takes
+  effect only after an **operator rebuild/release** (`RELEASE_PROCESS.md`),
+  never an autonomous deploy — there is no running service to restart.
