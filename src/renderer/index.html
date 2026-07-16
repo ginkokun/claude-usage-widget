@@ -368,6 +368,49 @@
                             </div>
                         </div>
 
+                        <!-- Row 8: Fleet setup (F-2, fork feature) — single control surface for this
+                             machine's fleet config. Writes agent_watch's fleet_config.json. -->
+                        <div class="settings-row-rsm4">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Fleet collision key</span>
+                                <div style="display: flex; gap: 6px;">
+                                    <input type="text" id="fleetCollisionKey" class="settings-text-input"
+                                        placeholder="paste key from another machine, or generate"
+                                        spellcheck="false" autocomplete="off">
+                                    <button type="button" class="connect-btn" id="fleetGenerateKeyBtn">Generate</button>
+                                </div>
+                                <span class="settings-row-hint" id="fleetKeyHint"></span>
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Collision key ID</span>
+                                <input type="text" id="fleetCollisionKeyId" class="settings-text-input"
+                                    placeholder="e.g. team-alpha" spellcheck="false" autocomplete="off">
+                            </div>
+                        </div>
+
+                        <div class="settings-row-rsm4">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Machine ID</span>
+                                <input type="text" id="fleetMachineId" class="settings-text-input" readonly
+                                    placeholder="minted by agent_watch on first use">
+                            </div>
+                            <div class="settings-col">
+                                <span class="settings-row-label">Fleet aggregator URL</span>
+                                <input type="text" id="fleetUrl" class="settings-text-input"
+                                    placeholder="https://fleet.example.com/api/v1/ingest"
+                                    spellcheck="false" autocomplete="off">
+                            </div>
+                        </div>
+
+                        <div class="settings-row-rsm4">
+                            <div class="settings-col">
+                                <span class="settings-row-label">Fleet ingest token</span>
+                                <input type="password" id="fleetToken" class="settings-text-input"
+                                    placeholder="leave blank to keep current" spellcheck="false" autocomplete="off">
+                                <span class="settings-row-hint" id="fleetTokenHint"></span>
+                            </div>
+                        </div>
+
                     </div>
 
                     <div class="settings-footer">

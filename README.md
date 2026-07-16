@@ -213,6 +213,33 @@ Right-click the tray icon for: Show/Hide, Refresh, Re-login, Settings, Exit. On 
 
 ---
 
+## Fleet setup
+
+For machines joining a fleet, the Settings panel has a **Fleet** section that
+is the single place to configure a machine's fleet setup — no separate config
+file to hand-edit:
+
+- **Fleet collision key** — a shared secret that correlates a machine's
+  submissions across the fleet. Click **Generate** to mint a new key (shown
+  once so you can copy it to other machines), or paste a key generated on
+  another machine to join its fleet. Leaving it blank when you save keeps
+  whatever key is already stored.
+- **Collision key ID** — a plain-text label for the key (e.g. a team name).
+- **Machine ID** — read-only; minted and persisted by `agent_watch` itself on
+  first active use, never by the widget.
+- **Fleet aggregator URL** / **Fleet ingest token** — where usage snapshots
+  are pushed and the credential used to authenticate that push (leave the
+  token blank to keep the current one).
+
+Saving this panel writes `fleet_collision_key` and `collision_key_id` to
+`fleet_config.json`, which the `agent_watch` Python engine (a separate
+component) reads to learn the fleet identity for this machine. See
+`RELAY_AGENT_CONTROL.md` for the full technical contract. (A companion update
+to the `relaystation_main` fleet documentation pointing operators at this
+panel is a separate, later follow-up.)
+
+---
+
 ## Privacy & Security
 
 - Credentials stored **locally only** using encrypted storage

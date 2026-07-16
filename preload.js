@@ -71,6 +71,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setFleetToken: (token) => ipcRenderer.invoke('set-fleet-token', token),
   hasFleetToken: () => ipcRenderer.invoke('has-fleet-token'),
 
+  // Fleet config — the widget is the single control surface for a machine's
+  // fleet setup (collision key, collision key id). Written to agent_watch's
+  // fleet_config.json; never returns the raw collision key.
+  getFleetConfig: () => ipcRenderer.invoke('get-fleet-config'),
+  setFleetConfig: (config) => ipcRenderer.invoke('set-fleet-config', config),
+  generateCollisionKey: () => ipcRenderer.invoke('generate-collision-key'),
+
   // Updates
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

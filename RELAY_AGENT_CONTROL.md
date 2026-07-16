@@ -170,3 +170,40 @@ onto the snapshot's machine-heartbeat block before sending.
 - **Deployability.** This code lands on the widget's `main` branch; it takes
   effect only after an **operator rebuild/release** (`RELEASE_PROCESS.md`),
   never an autonomous deploy — there is no running service to restart.
+
+## Fleet setup (the widget as the single control surface)
+
+The Settings panel's **Fleet** section is the one place on a machine to
+configure everything `agent_watch.py` (in the separate `relaystation_main`
+repo) needs to join the fleet. It manages:
+
+- **Fleet collision key** — a shared secret used to correlate a machine's
+  submissions across the fleet. **Generate** mints a fresh 32-byte key
+  (`crypto.randomBytes(32).toString('hex')`, 64 hex chars) and shows it once
+  in the field for the operator to copy — it is not re-displayed after
+  saving. To join an *existing* fleet, paste a key generated on another
+  machine instead. Leaving the field blank on save keeps whatever key is
+  already stored.
+- **Collision key ID** — a plain-text label for the key (e.g. a team or
+  fleet name), non-secret.
+- **Machine ID** — read-only. `agent_watch.py` mints and persists this on
+  first active use; the widget only displays it and never generates or
+  overwrites it.
+- **Fleet aggregator URL** / **Fleet ingest token** — the same
+  `settings.fleetUrl` / `set-fleet-token` pair documented under "Fleet
+  transport (F-2)" above; this panel is now their home in the UI.
+
+Saving the panel writes `fleet_collision_key` and `collision_key_id` to
+`fleet_config.json`, sitting next to the F-1/F-2 outbox at the same
+`agent_watch.state_dir()` path (see "Outbox path" above) — `src/fleet-config.js`
+resolves it via the same `resolveOutboxPath` base. The write is atomic
+(temp file + rename, mode `0600`) and always **preserves an existing
+`machine_id`** — the widget never mints or drops it, since doing so would
+make `agent_watch` treat the machine as a new identity. A blank collision
+key on save likewise never wipes a previously stored key. Reads
+(`get-fleet-config`) never return the raw key, only whether one is set.
+
+This is a widget-side follow-up to the fleet layer; the corresponding
+`relaystation_main` fleet doc (`AGENT_OBSERVABILITY_FLEET.md` §4) still needs
+its own update to point operators at this panel — that is a **separate,
+later card**, not part of this change.

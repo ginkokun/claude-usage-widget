@@ -14,6 +14,11 @@ const {
   pollFleetOutbox,
 } = require('./src/push-fleet-snapshot');
 const {
+  readConfig: readFleetConfig,
+  writeConfig: writeFleetConfig,
+  generateCollisionKey,
+} = require('./src/fleet-config');
+const {
   getDefaultConfig,
   isValidDashboardUrl,
   buildLaunchPayload,
@@ -1354,6 +1359,27 @@ ipcMain.handle('set-fleet-token', (event, token) => {
 
 ipcMain.handle('has-fleet-token', () => {
   return !!store.get('fleetToken_encrypted');
+});
+
+// --- Fleet config (widget as the single control surface, F-2) -------------
+// fleet_collision_key and collision_key_id live in fleet_config.json next to
+// the F-1/F-2 outbox — agent_watch.py reads that file and mints+persists
+// machine_id there on first active use. The widget only ever reads it back
+// through readConfig, which never returns the raw key.
+
+ipcMain.handle('get-fleet-config', () => {
+  return readFleetConfig();
+});
+
+ipcMain.handle('set-fleet-config', (event, config) => {
+  return writeFleetConfig({
+    collision_key: config && config.collision_key,
+    collision_key_id: config && config.collision_key_id,
+  });
+});
+
+ipcMain.handle('generate-collision-key', () => {
+  return generateCollisionKey();
 });
 
 // Open a visible BrowserWindow for the user to log in to Claude.ai.

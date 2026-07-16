@@ -84,6 +84,14 @@ const elements = {
     rsm4Url: document.getElementById('rsm4Url'),
     rsm4Token: document.getElementById('rsm4Token'),
     rsm4TokenHint: document.getElementById('rsm4TokenHint'),
+    fleetCollisionKeyId: document.getElementById('fleetCollisionKeyId'),
+    fleetCollisionKey: document.getElementById('fleetCollisionKey'),
+    fleetGenerateKeyBtn: document.getElementById('fleetGenerateKeyBtn'),
+    fleetKeyHint: document.getElementById('fleetKeyHint'),
+    fleetMachineId: document.getElementById('fleetMachineId'),
+    fleetUrl: document.getElementById('fleetUrl'),
+    fleetToken: document.getElementById('fleetToken'),
+    fleetTokenHint: document.getElementById('fleetTokenHint'),
     orgSelector: document.getElementById('orgSelector'),
     orgSelectorCol: document.getElementById('orgSelectorCol'),
 
@@ -316,6 +324,19 @@ function setupEventListeners() {
         }
         startAutoUpdate();
     });
+
+    // Fleet setup (F-2, fork feature): generate a fresh collision key and show
+    // it once so the operator can copy it to other machines. It is not
+    // persisted until Settings is saved (closeSettingsBtn -> saveSettings).
+    if (elements.fleetGenerateKeyBtn) {
+        elements.fleetGenerateKeyBtn.addEventListener('click', async () => {
+            const key = await window.electronAPI.generateCollisionKey();
+            elements.fleetCollisionKey.value = key;
+            if (elements.fleetKeyHint) {
+                elements.fleetKeyHint.textContent = 'New key generated — copy it now, then Done to save';
+            }
+        });
+    }
 
     elements.logoutBtn.addEventListener('click', async () => {
         await window.electronAPI.deleteCredentials();
@@ -1562,6 +1583,16 @@ async function loadSettings() {
     if (elements.rsm4TokenHint) {
         elements.rsm4TokenHint.textContent = settings.rsm4TokenSet ? 'Token saved' : 'No token saved';
     }
+    // Fleet setup (F-2, fork feature): URL + whether a token is stored come
+    // from settings; the collision key/id + machine_id come from fleet-config
+    // (a separate file agent_watch also reads/writes). The secret token is
+    // never read back — only whether one is stored.
+    if (elements.fleetUrl) elements.fleetUrl.value = settings.fleetUrl || '';
+    if (elements.fleetToken) elements.fleetToken.value = '';
+    if (elements.fleetTokenHint) {
+        elements.fleetTokenHint.textContent = settings.fleetTokenSet ? 'Token saved' : 'No token saved';
+    }
+    await loadFleetConfig();
     elements.usageAlertsToggle.checked = settings.usageAlerts !== false;
     if (elements.compactModeToggle) elements.compactModeToggle.checked = !!settings.compactMode;
 
@@ -1581,6 +1612,20 @@ async function loadSettings() {
     if (window.electronAPI.platform === 'darwin') {
         document.getElementById('trayLabel').textContent = 'Hide from Dock';
     }
+}
+
+// Fleet config (F-2, fork feature): load agent_watch's fleet_config.json
+// state for display. The raw collision key is never returned — only
+// collision_key_id, machine_id, and whether a key is set.
+async function loadFleetConfig() {
+    if (!window.electronAPI.getFleetConfig) return;
+    const config = await window.electronAPI.getFleetConfig();
+    if (elements.fleetCollisionKeyId) elements.fleetCollisionKeyId.value = config.collision_key_id || '';
+    if (elements.fleetCollisionKey) elements.fleetCollisionKey.value = '';
+    if (elements.fleetKeyHint) {
+        elements.fleetKeyHint.textContent = config.hasKey ? 'Key saved' : 'No key saved';
+    }
+    if (elements.fleetMachineId) elements.fleetMachineId.value = config.machine_id || '';
 }
 
 async function saveSettings() {
@@ -1613,7 +1658,9 @@ async function saveSettings() {
         graphVisible: graphVisible,
         expandedOpen: isExpanded,
         // RSM-4 ingest URL (non-secret). Empty string disables the feature.
-        rsm4Url: elements.rsm4Url ? elements.rsm4Url.value.trim() : ''
+        rsm4Url: elements.rsm4Url ? elements.rsm4Url.value.trim() : '',
+        // Fleet aggregator URL (non-secret, F-2). Empty string disables the feature.
+        fleetUrl: elements.fleetUrl ? elements.fleetUrl.value.trim() : ''
     };
     await window.electronAPI.saveSettings(settings);
 
@@ -1629,6 +1676,35 @@ async function saveSettings() {
             }
         } catch (e) {
             debugLog('Failed to save RSM-4 token', e);
+        }
+    }
+
+    // Fleet config (F-2, fork feature): collision key + key id write to
+    // agent_watch's fleet_config.json. A blank key field means "keep the
+    // existing key" (fleet-config.js preserves it on the writer side too).
+    if (window.electronAPI.setFleetConfig) {
+        try {
+            await window.electronAPI.setFleetConfig({
+                collision_key: elements.fleetCollisionKey ? elements.fleetCollisionKey.value.trim() : '',
+                collision_key_id: elements.fleetCollisionKeyId ? elements.fleetCollisionKeyId.value.trim() : ''
+            });
+            await loadFleetConfig();
+        } catch (e) {
+            debugLog('Failed to save fleet config', e);
+        }
+    }
+
+    // Persist the fleet ingest token separately (fail-closed via safeStorage
+    // in main). Only send it when the user actually typed something.
+    if (elements.fleetToken && elements.fleetToken.value.trim()) {
+        try {
+            const res = await window.electronAPI.setFleetToken(elements.fleetToken.value.trim());
+            elements.fleetToken.value = '';
+            if (elements.fleetTokenHint) {
+                elements.fleetTokenHint.textContent = res && res.tokenSet ? 'Token saved' : 'No token saved';
+            }
+        } catch (e) {
+            debugLog('Failed to save fleet token', e);
         }
     }
     window._cachedSettings = settings;
