@@ -4,6 +4,19 @@ This document consolidates all release notes for the 1.7.x release series.
 
 ---
 
+## v1.7.7
+
+**Released:** July 2026
+
+This release fixes the Settings panel so all rows, including the Fleet section, are reachable.
+
+### Fixes
+
+**Settings panel scrolling**
+The Settings panel now scrolls instead of centering and clipping its content. Previously, the fixed-height overlay clipped the top and bottom of taller content, making the Fleet config rows added in 1.7.6 unreachable.
+
+---
+
 ## v1.7.6
 
 **Released:** July 2026
