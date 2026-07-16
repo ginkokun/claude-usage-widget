@@ -8,6 +8,9 @@
 const os = require('os');
 const path = require('path');
 
+/** Maximum accepted length (after trimming) of a work description. */
+const WORK_DESCRIPTION_MAX_CHARS = 2000;
+
 /**
  * Default tray config. relaystation_main is always derived from the current
  * user's home directory — never hardcoded — so this works for any user.
@@ -58,12 +61,16 @@ function buildCoordinatorPrompt(target, workDescription) {
   if (target !== 'codex' && target !== 'claude') {
     throw new Error(`Unsupported coordinator target: ${target}`);
   }
-  if (typeof workDescription !== 'string' || !workDescription.trim()) {
+  const trimmed = typeof workDescription === 'string' ? workDescription.trim() : '';
+  if (!trimmed) {
     throw new Error('workDescription must be a non-empty string');
+  }
+  if (trimmed.length > WORK_DESCRIPTION_MAX_CHARS) {
+    throw new Error(`workDescription must be at most ${WORK_DESCRIPTION_MAX_CHARS} characters`);
   }
 
   const lines = [
-    `Work: ${workDescription.trim()}`,
+    `Work: ${trimmed}`,
     '',
     'No human approval is expected during execution: proceed autonomously through the work.',
     'Claude agents implement the changes while the coordinator reviews the results.',
@@ -114,28 +121,52 @@ function posixQuote(value) {
 }
 
 /**
- * Build the launch payload (prompt + deep link) for a blank/cancelled work
- * description returns null instead of a malformed prompt/link.
+ * Build the launch payload for a coordinator target. Returns null (instead
+ * of a malformed prompt/link) for a blank/cancelled or over-limit work
+ * description. The Codex payload includes a deepLink; the Claude payload
+ * only carries the prompt, since it is launched by copy/paste, not a link.
  *
  * @param {'codex'|'claude'} target
  * @param {string} workDescription
- * @param {string} repoPath - Absolute path to the repo.
- * @returns {{prompt: string, deepLink: string}|null}
+ * @param {string} [repoPath] - Absolute path to the repo (required for codex).
+ * @returns {{prompt: string, deepLink: string}|{prompt: string}|null}
  */
 function buildLaunchPayload(target, workDescription, repoPath) {
-  if (typeof workDescription !== 'string' || !workDescription.trim()) {
+  const trimmed = typeof workDescription === 'string' ? workDescription.trim() : '';
+  if (!trimmed || trimmed.length > WORK_DESCRIPTION_MAX_CHARS) {
     return null;
   }
-  const prompt = buildCoordinatorPrompt(target, workDescription);
-  const deepLink = buildCodexDeepLink(prompt, repoPath);
-  return { prompt, deepLink };
+  const prompt = buildCoordinatorPrompt(target, trimmed);
+
+  if (target === 'codex') {
+    const deepLink = buildCodexDeepLink(prompt, repoPath);
+    return { prompt, deepLink };
+  }
+  return { prompt };
+}
+
+/**
+ * Build the pure command string for launching the agent watch monitor in a
+ * terminal, quoting the interpreter and script path/argument POSIX-safely.
+ *
+ * @param {string} repoPath - Absolute path to the repo.
+ * @returns {string}
+ */
+function buildMonitorCommand(repoPath) {
+  if (typeof repoPath !== 'string' || !path.isAbsolute(repoPath)) {
+    throw new Error('repoPath must be an absolute path');
+  }
+  const scriptPath = path.join(repoPath, 'scripts', 'agent_watch.py');
+  return [posixQuote('/usr/bin/python3'), posixQuote(scriptPath), posixQuote('watch')].join(' ');
 }
 
 module.exports = {
+  WORK_DESCRIPTION_MAX_CHARS,
   getDefaultConfig,
   isValidDashboardUrl,
   buildCoordinatorPrompt,
   buildCodexDeepLink,
   posixQuote,
   buildLaunchPayload,
+  buildMonitorCommand,
 };

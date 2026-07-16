@@ -1,9 +1,16 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const https = require('https');
+const { execFile } = require('child_process');
 const Store = require('electron-store');
 const { fetchViaWindow, fetchMultipleViaWindow } = require('./src/fetch-via-window');
 const { pushUsageToRSM4 } = require('./src/push-to-rsm4');
+const {
+  getDefaultConfig,
+  isValidDashboardUrl,
+  buildLaunchPayload,
+  buildMonitorCommand,
+} = require('./src/relay-agent-control');
 
 const GITHUB_OWNER = 'SlavomirDurej';
 const GITHUB_REPO = 'claude-usage-widget';
@@ -548,6 +555,137 @@ function showMainWindowClean() {
   mainWindow.focus();
 }
 
+// --- Relay Station tray submenu (macOS only) ---
+//
+// Native dialogs/launches are driven via /usr/bin/osascript with fixed
+// AppleScript source; any dynamic value (the prompt text, the monitor
+// command) is passed as an argv item after `--`, never interpolated into
+// the script source or a shell string.
+
+const RELAY_PROMPT_SCRIPT = `
+on run
+  display dialog "What are we working on?" default answer "" with title "Relay Station"
+  return text returned of result
+end run
+`;
+
+const RELAY_OPEN_TERMINAL_SCRIPT = `
+on run argv
+  set cmdString to item 1 of argv
+  tell application "Terminal"
+    activate
+    do script cmdString
+  end tell
+end run
+`;
+
+function runOsascript(script, args) {
+  return new Promise((resolve, reject) => {
+    execFile('/usr/bin/osascript', ['-e', script, '--', ...(args || [])], (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(String(stdout));
+    });
+  });
+}
+
+// Resolves to the trimmed answer, or '' when the dialog was cancelled/failed.
+async function promptForWorkDescription() {
+  try {
+    const stdout = await runOsascript(RELAY_PROMPT_SCRIPT);
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}
+
+function showRelayStationError(message) {
+  console.error('[Relay Station]', message);
+  try {
+    new Notification({ title: 'Relay Station', body: message }).show();
+  } catch {}
+}
+
+function getRelayStationRepoPath() {
+  return store.get('settings.relayStationRepoPath') || getDefaultConfig().relaystationMain;
+}
+
+async function launchCodexCoordinator() {
+  const workDescription = await promptForWorkDescription();
+  if (!workDescription) return; // cancelled or blank — no launch
+  try {
+    const payload = buildLaunchPayload('codex', workDescription, getRelayStationRepoPath());
+    if (!payload) return; // over the length limit — no launch
+    await shell.openExternal(payload.deepLink);
+  } catch (error) {
+    showRelayStationError(`Failed to launch Codex coordinator: ${error.message}`);
+  }
+}
+
+async function launchClaudeCoordinator() {
+  const workDescription = await promptForWorkDescription();
+  if (!workDescription) return; // cancelled or blank — no launch
+  try {
+    const payload = buildLaunchPayload('claude', workDescription);
+    if (!payload) return; // over the length limit — no launch
+    clipboard.writeText(payload.prompt);
+    await shell.openPath('/Applications/Claude.app');
+    new Notification({ title: 'Relay Station', body: 'Coordinator prompt copied to clipboard.' }).show();
+  } catch (error) {
+    showRelayStationError(`Failed to launch Claude coordinator: ${error.message}`);
+  }
+}
+
+async function openTerminalControlBoard() {
+  try {
+    const repoPath = getRelayStationRepoPath();
+    const isValidRepo = typeof repoPath === 'string'
+      && path.isAbsolute(repoPath)
+      && fs.existsSync(repoPath)
+      && fs.statSync(repoPath).isDirectory();
+    if (!isValidRepo) {
+      showRelayStationError('Relay Station repo path is missing or invalid.');
+      return;
+    }
+    if (!fs.existsSync(path.join(repoPath, 'scripts', 'agent_watch.py'))) {
+      showRelayStationError('agent_watch.py not found in the Relay Station repo.');
+      return;
+    }
+    const command = buildMonitorCommand(repoPath);
+    await runOsascript(RELAY_OPEN_TERMINAL_SCRIPT, [command]);
+  } catch (error) {
+    showRelayStationError(`Failed to open Terminal Control Board: ${error.message}`);
+  }
+}
+
+async function openTvFleetDashboard() {
+  try {
+    const url = store.get('settings.relayStationDashboardUrl') || '';
+    if (!url || !isValidDashboardUrl(url)) return;
+    await shell.openExternal(url);
+  } catch (error) {
+    showRelayStationError(`Failed to open TV Fleet Dashboard: ${error.message}`);
+  }
+}
+
+function buildRelayStationSubmenu() {
+  const dashboardUrl = store.get('settings.relayStationDashboardUrl') || '';
+  const dashboardEnabled = Boolean(dashboardUrl) && isValidDashboardUrl(dashboardUrl);
+
+  return {
+    label: 'RELAY STATION // AGENT CONTROL',
+    submenu: [
+      { label: 'Launch Codex Coordinator…', click: () => { launchCodexCoordinator(); } },
+      { label: 'Launch Claude Coordinator…', click: () => { launchClaudeCoordinator(); } },
+      { type: 'separator' },
+      { label: 'Open Terminal Control Board', click: () => { openTerminalControlBoard(); } },
+      { label: 'Open TV Fleet Dashboard', enabled: dashboardEnabled, click: () => { openTvFleetDashboard(); } },
+    ],
+  };
+}
+
 function createTray() {
   // Respect the tray stats setting even when createTray is called from generic refresh paths.
   if (!store.get('settings.showTrayStats', false)) {
@@ -572,7 +710,7 @@ function createTray() {
     sessionTray = new Tray(staticIconPath);
     sessionTray.setToolTip('Session Usage');
 
-    const contextMenu = Menu.buildFromTemplate([
+    const menuTemplate = [
       {
         label: 'Show Widget',
         click: () => {
@@ -612,13 +750,22 @@ function createTray() {
         }
       },
       { type: 'separator' },
-      {
-        label: 'Exit',
-        click: () => {
-          app.quit();
-        }
+    ];
+
+    // macOS-only Relay Station agent-control submenu; other platforms keep the
+    // existing menu items unchanged.
+    if (process.platform === 'darwin') {
+      menuTemplate.push(buildRelayStationSubmenu(), { type: 'separator' });
+    }
+
+    menuTemplate.push({
+      label: 'Exit',
+      click: () => {
+        app.quit();
       }
-    ]);
+    });
+
+    const contextMenu = Menu.buildFromTemplate(menuTemplate);
 
     sessionTray.setContextMenu(contextMenu);
     weeklyTray.setContextMenu(contextMenu);

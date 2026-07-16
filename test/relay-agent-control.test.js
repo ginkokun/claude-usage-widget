@@ -3,12 +3,14 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const {
+  WORK_DESCRIPTION_MAX_CHARS,
   getDefaultConfig,
   isValidDashboardUrl,
   buildCoordinatorPrompt,
   buildCodexDeepLink,
   posixQuote,
   buildLaunchPayload,
+  buildMonitorCommand,
 } = require('../src/relay-agent-control.js');
 
 test('getDefaultConfig derives relaystation_main from a supplied home path', () => {
@@ -63,6 +65,13 @@ test('buildCoordinatorPrompt rejects blank work description', () => {
   assert.throws(() => buildCoordinatorPrompt('codex', '   '));
 });
 
+test('buildCoordinatorPrompt accepts exactly WORK_DESCRIPTION_MAX_CHARS but rejects one over', () => {
+  const atLimit = 'x'.repeat(WORK_DESCRIPTION_MAX_CHARS);
+  const overLimit = 'x'.repeat(WORK_DESCRIPTION_MAX_CHARS + 1);
+  assert.doesNotThrow(() => buildCoordinatorPrompt('codex', atLimit));
+  assert.throws(() => buildCoordinatorPrompt('codex', overLimit));
+});
+
 test('buildCodexDeepLink uses codex://threads/new with encoded prompt and absolute path', () => {
   const prompt = 'Fix the "widget" & make it fast\nsecond line';
   const repoPath = '/Users/tester/Documents/Codex/repos/relaystation_main';
@@ -96,12 +105,49 @@ test('buildLaunchPayload returns null for blank/cancelled work description', () 
   assert.equal(buildLaunchPayload('codex', undefined, '/some/repo'), null);
 });
 
-test('buildLaunchPayload returns a valid prompt and deep link for real input', () => {
+test('buildLaunchPayload returns null for an over-limit trimmed description', () => {
+  const overLimit = 'x'.repeat(WORK_DESCRIPTION_MAX_CHARS + 1);
+  assert.equal(buildLaunchPayload('codex', overLimit, '/some/repo'), null);
+  assert.equal(buildLaunchPayload('claude', overLimit, '/some/repo'), null);
+});
+
+test('buildLaunchPayload accepts an exactly-at-limit description', () => {
+  const atLimit = 'x'.repeat(WORK_DESCRIPTION_MAX_CHARS);
+  const payload = buildLaunchPayload('codex', atLimit, '/some/repo');
+  assert.notEqual(payload, null);
+});
+
+test('buildLaunchPayload returns {prompt, deepLink} for codex target', () => {
   const repoPath = '/Users/tester/Documents/Codex/repos/relaystation_main';
-  const payload = buildLaunchPayload('claude', 'Implement the tray submenu', repoPath);
+  const payload = buildLaunchPayload('codex', 'Implement the tray submenu', repoPath);
   assert.notEqual(payload, null);
   assert.match(payload.prompt, /Implement the tray submenu/);
   const url = new URL(payload.deepLink);
   assert.equal(url.searchParams.get('prompt'), payload.prompt);
   assert.equal(url.searchParams.get('path'), repoPath);
+});
+
+test('buildLaunchPayload returns only {prompt} for claude target (no deepLink)', () => {
+  const payload = buildLaunchPayload('claude', 'Implement the tray submenu', '/some/repo');
+  assert.notEqual(payload, null);
+  assert.match(payload.prompt, /Implement the tray submenu/);
+  assert.equal('deepLink' in payload, false);
+  assert.deepEqual(Object.keys(payload), ['prompt']);
+});
+
+test('buildMonitorCommand builds a POSIX-safe command with the python3 interpreter', () => {
+  const cmd = buildMonitorCommand('/Users/tester/Documents/Codex/repos/relaystation_main');
+  assert.equal(
+    cmd,
+    "'/usr/bin/python3' '/Users/tester/Documents/Codex/repos/relaystation_main/scripts/agent_watch.py' 'watch'"
+  );
+});
+
+test('buildMonitorCommand quotes spaces and apostrophes in the repo path', () => {
+  const cmd = buildMonitorCommand("/Users/tester/My Repo's Path");
+  assert.match(cmd, /'\/Users\/tester\/My Repo'\\''s Path\/scripts\/agent_watch\.py'/);
+});
+
+test('buildMonitorCommand rejects non-absolute repo paths', () => {
+  assert.throws(() => buildMonitorCommand('relative/path'));
 });
