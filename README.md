@@ -23,6 +23,7 @@ A beautiful, standalone desktop widget for **Windows, macOS, and Linux** that di
 🔔 **Update Notifications** — Automatic check for new releases on startup  
 🕐 **Configurable Date & Time Formats** — 12h/24h time, and flexible weekly reset date display  
 📐 **Compact Mode** — Minimal view for when you just need a quick glance  
+🖥️ **Relay Station Agent Control (macOS)** — Tray submenu for Relay Station pipeline shortcuts; see [RELAY_AGENT_CONTROL.md](RELAY_AGENT_CONTROL.md)  
 
 ---
 
@@ -190,7 +191,7 @@ npm start
 
 ### System Tray
 
-Right-click the tray icon for: Show/Hide, Refresh, Re-login, Settings, Exit.
+Right-click the tray icon for: Show/Hide, Refresh, Re-login, Settings, Exit. On macOS, a **RELAY STATION // AGENT CONTROL** submenu also appears; see [RELAY_AGENT_CONTROL.md](RELAY_AGENT_CONTROL.md).
 
 ---
 
