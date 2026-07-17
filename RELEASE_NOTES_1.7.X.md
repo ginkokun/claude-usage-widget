@@ -4,6 +4,19 @@ This document consolidates all release notes for the 1.7.x release series.
 
 ---
 
+## v1.7.8
+
+**Released:** July 2026
+
+This release fixes a silent failure mode in the Fleet panel: saving a collision key without a Collision key ID left the config inactive with no feedback.
+
+### Fixes
+
+**Fleet active/inactive status**
+The Fleet panel now shows a visible "Fleet: active" / "Fleet: inactive — <reason>" status line, matching agent_watch's own activation rule (both a collision key AND a Collision key ID must be set). Saving a key with a blank Collision key ID — previously a silent no-op with no machine_id, no snapshot, and no push — now surfaces the reason inline and in the status line, without discarding what was entered.
+
+---
+
 ## v1.7.7
 
 **Released:** July 2026

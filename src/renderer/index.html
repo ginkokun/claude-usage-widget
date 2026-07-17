@@ -370,6 +370,9 @@
 
                         <!-- Row 8: Fleet setup (F-2, fork feature) — single control surface for this
                              machine's fleet config. Writes agent_watch's fleet_config.json. -->
+                        <div class="settings-row-fleet-status">
+                            <span class="fleet-status" id="fleetStatus"></span>
+                        </div>
                         <div class="settings-row-rsm4">
                             <div class="settings-col">
                                 <span class="settings-row-label">Fleet collision key</span>
@@ -385,6 +388,7 @@
                                 <span class="settings-row-label">Collision key ID</span>
                                 <input type="text" id="fleetCollisionKeyId" class="settings-text-input"
                                     placeholder="e.g. team-alpha" spellcheck="false" autocomplete="off">
+                                <span class="settings-row-hint" id="fleetIdHint"></span>
                             </div>
                         </div>
 

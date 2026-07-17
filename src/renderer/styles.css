@@ -1366,6 +1366,25 @@ body.theme-light .settings-update-link {
     border-color: rgba(255,255,255,0.3);
 }
 
+/* Fleet active/inactive status line (F-2, fork feature) */
+.settings-row-fleet-status {
+    padding: 0 4px;
+}
+
+.fleet-status {
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 1.2;
+}
+
+.fleet-status.fleet-status-active {
+    color: #4ade80;
+}
+
+.fleet-status.fleet-status-inactive {
+    color: #f59e0b;
+}
+
 /* RSM-4 push (fork feature) settings row */
 .settings-row-rsm4 {
     display: grid;

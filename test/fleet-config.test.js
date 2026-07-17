@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { configPath, readConfig, writeConfig, generateCollisionKey } = require('../src/fleet-config');
+const { configPath, readConfig, writeConfig, generateCollisionKey, fleetStatus } = require('../src/fleet-config');
 
 function tempStateDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-config-test-'));
@@ -95,5 +95,42 @@ test('missing config file yields a sensible empty default', () => {
     collision_key_id: '',
     machine_id: null,
     hasKey: false,
+  });
+});
+
+// --- fleetStatus ----------------------------------------------------------
+
+test('fleetStatus is active when both key and id are set', () => {
+  assert.deepStrictEqual(fleetStatus({ hasKey: true, collision_key_id: 'team-alpha' }), {
+    active: true,
+    reason: '',
+  });
+});
+
+test('fleetStatus is inactive with a clear reason when the id is blank (the silent-inactive trap)', () => {
+  assert.deepStrictEqual(fleetStatus({ hasKey: true, collision_key_id: '' }), {
+    active: false,
+    reason: 'set a Collision key ID',
+  });
+});
+
+test('fleetStatus is inactive with a clear reason when the id is set but no key', () => {
+  assert.deepStrictEqual(fleetStatus({ hasKey: false, collision_key_id: 'team-alpha' }), {
+    active: false,
+    reason: 'generate or paste a collision key',
+  });
+});
+
+test('fleetStatus is inactive when neither key nor id is set', () => {
+  assert.deepStrictEqual(fleetStatus({ hasKey: false, collision_key_id: '' }), {
+    active: false,
+    reason: 'not configured',
+  });
+});
+
+test('fleetStatus treats a whitespace-only id as blank', () => {
+  assert.deepStrictEqual(fleetStatus({ hasKey: true, collision_key_id: '   ' }), {
+    active: false,
+    reason: 'set a Collision key ID',
   });
 });

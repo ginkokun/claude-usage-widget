@@ -120,9 +120,28 @@ function generateCollisionKey() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+/**
+ * Mirrors agent_watch's own activation rule: a config is only ACTIVE for
+ * agent_watch (machine_id minted, snapshot pushed) when BOTH a collision key
+ * and a collision_key_id are set. Pure helper so the renderer can surface the
+ * same rule as visible status instead of a silent no-op.
+ *
+ * @param {{hasKey: boolean, collision_key_id: string, machine_id?: string|null}} config
+ * @returns {{active: boolean, reason: string}}
+ */
+function fleetStatus({ hasKey, collision_key_id }) {
+  const hasId = typeof collision_key_id === 'string' && collision_key_id.trim().length > 0;
+
+  if (hasKey && hasId) return { active: true, reason: '' };
+  if (hasKey && !hasId) return { active: false, reason: 'set a Collision key ID' };
+  if (!hasKey && hasId) return { active: false, reason: 'generate or paste a collision key' };
+  return { active: false, reason: 'not configured' };
+}
+
 module.exports = {
   configPath,
   readConfig,
   writeConfig,
   generateCollisionKey,
+  fleetStatus,
 };

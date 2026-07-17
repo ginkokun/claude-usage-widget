@@ -85,9 +85,11 @@ const elements = {
     rsm4Token: document.getElementById('rsm4Token'),
     rsm4TokenHint: document.getElementById('rsm4TokenHint'),
     fleetCollisionKeyId: document.getElementById('fleetCollisionKeyId'),
+    fleetIdHint: document.getElementById('fleetIdHint'),
     fleetCollisionKey: document.getElementById('fleetCollisionKey'),
     fleetGenerateKeyBtn: document.getElementById('fleetGenerateKeyBtn'),
     fleetKeyHint: document.getElementById('fleetKeyHint'),
+    fleetStatus: document.getElementById('fleetStatus'),
     fleetMachineId: document.getElementById('fleetMachineId'),
     fleetUrl: document.getElementById('fleetUrl'),
     fleetToken: document.getElementById('fleetToken'),
@@ -1614,6 +1616,38 @@ async function loadSettings() {
     }
 }
 
+// Mirrors src/fleet-config.js's fleetStatus — agent_watch's own activation
+// rule (BOTH a collision key AND a collision_key_id must be set, or the
+// config is silently inactive: no machine_id, no snapshot, no push). Renderer
+// runs with contextIsolation/no nodeIntegration so it can't require() that
+// Node module directly; kept in lockstep with the pure helper it mirrors.
+function fleetStatus({ hasKey, collision_key_id }) {
+    const hasId = typeof collision_key_id === 'string' && collision_key_id.trim().length > 0;
+    if (hasKey && hasId) return { active: true, reason: '' };
+    if (hasKey && !hasId) return { active: false, reason: 'set a Collision key ID' };
+    if (!hasKey && hasId) return { active: false, reason: 'generate or paste a collision key' };
+    return { active: false, reason: 'not configured' };
+}
+
+function renderFleetStatus(config) {
+    if (!elements.fleetStatus) return;
+    const status = fleetStatus(config);
+    elements.fleetStatus.classList.remove('fleet-status-active', 'fleet-status-inactive');
+    if (status.active) {
+        elements.fleetStatus.classList.add('fleet-status-active');
+        elements.fleetStatus.textContent = config.machine_id
+            ? `Fleet: active — machine id ${config.machine_id}`
+            : 'Fleet: active — machine id pending first agent run';
+    } else {
+        elements.fleetStatus.classList.add('fleet-status-inactive');
+        elements.fleetStatus.textContent = `Fleet: inactive — ${status.reason}`;
+    }
+    if (elements.fleetIdHint) {
+        elements.fleetIdHint.textContent =
+            status.reason === 'set a Collision key ID' ? 'Required for the key above to take effect' : '';
+    }
+}
+
 // Fleet config (F-2, fork feature): load agent_watch's fleet_config.json
 // state for display. The raw collision key is never returned — only
 // collision_key_id, machine_id, and whether a key is set.
@@ -1626,6 +1660,7 @@ async function loadFleetConfig() {
         elements.fleetKeyHint.textContent = config.hasKey ? 'Key saved' : 'No key saved';
     }
     if (elements.fleetMachineId) elements.fleetMachineId.value = config.machine_id || '';
+    renderFleetStatus(config);
 }
 
 async function saveSettings() {
