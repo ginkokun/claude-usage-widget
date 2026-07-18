@@ -12,6 +12,7 @@ const {
   buildClaudeBackgroundLaunchArgs,
   parseAgentsJson,
   findLaunchedSession,
+  parseBgLaunchStdout,
 } = require('../src/claude-code-launch.js');
 
 test('getClaudeExecutableCandidates derives the native-install path from home and includes Homebrew paths', () => {
@@ -48,28 +49,54 @@ test('resolveClaudeExecutable checks candidates in order (first match wins)', ()
   assert.deepEqual(seen, ['/a/claude']);
 });
 
-test('buildSessionName slugifies the work description and prefixes it', () => {
-  assert.equal(buildSessionName('Fix the tray menu bug'), 'relay-claude-fix-the-tray-menu-bug');
-  assert.equal(buildSessionName('  Add F-2 support!! '), 'relay-claude-add-f-2-support');
+test('buildSessionName slugifies the work description, prefixes it, and appends the suffix', () => {
+  assert.equal(buildSessionName('Fix the tray menu bug', 'ab12cd34'), 'relay-claude-fix-the-tray-menu-bug-ab12cd34');
+  assert.equal(buildSessionName('  Add F-2 support!! ', 'ab12cd34'), 'relay-claude-add-f-2-support-ab12cd34');
 });
 
-test('buildSessionName falls back to a fixed name when the slug is empty', () => {
-  assert.equal(buildSessionName('!!! ??? ###'), 'relay-claude-coordinator');
-  assert.equal(buildSessionName(''), 'relay-claude-coordinator');
-  assert.equal(buildSessionName(undefined), 'relay-claude-coordinator');
+test('buildSessionName falls back to a fixed base when the slug is empty (ASCII punctuation)', () => {
+  assert.equal(buildSessionName('!!! ??? ###', 'ab12cd34'), 'relay-claude-coordinator-ab12cd34');
+  assert.equal(buildSessionName('', 'ab12cd34'), 'relay-claude-coordinator-ab12cd34');
+  assert.equal(buildSessionName(undefined, 'ab12cd34'), 'relay-claude-coordinator-ab12cd34');
 });
 
-test('buildSessionName truncates long descriptions and stays within the safe charset', () => {
-  const name = buildSessionName('x'.repeat(200));
+test('buildSessionName distinguishes non-Latin work descriptions via the suffix, not the slug', () => {
+  // The slugifier only keeps [a-z0-9], so Cyrillic (and CJK, emoji, ...)
+  // descriptions all collapse to the same empty slug/base — the suffix is
+  // what actually keeps two Russian-language missions apart.
+  const first = buildSessionName('Почини баг в трее', 'aaaaaaaa');
+  const second = buildSessionName('Добавь настройки флота', 'bbbbbbbb');
+  assert.equal(first, 'relay-claude-coordinator-aaaaaaaa');
+  assert.equal(second, 'relay-claude-coordinator-bbbbbbbb');
+  assert.notEqual(first, second);
+});
+
+test('buildSessionName gives two concurrent identical descriptions distinct names via distinct suffixes', () => {
+  const a = buildSessionName('Fix the same bug', 'aaaaaaaa');
+  const b = buildSessionName('Fix the same bug', 'bbbbbbbb');
+  assert.notEqual(a, b);
+});
+
+test('buildSessionName truncates the slug/base — never the suffix — to stay within the safe charset', () => {
+  const name = buildSessionName('x'.repeat(200), 'deadbeef');
   assert.ok(name.length <= 64);
   assert.match(name, SESSION_NAME_PATTERN);
+  assert.ok(name.endsWith('-deadbeef'));
 });
 
 test('buildSessionName output always matches SESSION_NAME_PATTERN', () => {
-  const cases = ['Normal case', 'émoji 🎉 test', '---', 'A', 'a'.repeat(500)];
+  const cases = ['Normal case', 'émoji 🎉 test', '---', 'A', 'a'.repeat(500), 'Русский текст'];
   for (const c of cases) {
-    assert.match(buildSessionName(c), SESSION_NAME_PATTERN, `failed for: ${c}`);
+    assert.match(buildSessionName(c, 'ab12cd34'), SESSION_NAME_PATTERN, `failed for: ${c}`);
   }
+});
+
+test('buildSessionName rejects a missing or malformed uniqueSuffix', () => {
+  assert.throws(() => buildSessionName('do work', ''));
+  assert.throws(() => buildSessionName('do work', undefined));
+  assert.throws(() => buildSessionName('do work', 'ab')); // too short
+  assert.throws(() => buildSessionName('do work', 'has spaces'));
+  assert.throws(() => buildSessionName('do work', '--injected'));
 });
 
 test('buildClaudeBackgroundLaunchArgs builds the expected argv with defaults', () => {
@@ -175,4 +202,40 @@ test('findLaunchedSession picks the most recently started match when there are s
 test('findLaunchedSession handles a non-array input gracefully', () => {
   assert.equal(findLaunchedSession(null, 'relay-claude-x'), null);
   assert.equal(findLaunchedSession(undefined, 'relay-claude-x'), null);
+});
+
+test('parseBgLaunchStdout parses the plain-text confirmation line with an id and a name', () => {
+  const stdout = [
+    'backgrounded · 7bfd7dd7 · relay-claude-fix-the-tray-menu-bug-ab12cd34',
+    '  claude agents               list sessions',
+    '  claude attach 7bfd7dd7      open in this terminal',
+    '  claude logs 7bfd7dd7        show recent output',
+    '  claude stop 7bfd7dd7        stop this session',
+    '',
+  ].join('\n');
+  assert.deepEqual(parseBgLaunchStdout(stdout), {
+    shortId: '7bfd7dd7',
+    name: 'relay-claude-fix-the-tray-menu-bug-ab12cd34',
+  });
+});
+
+test('parseBgLaunchStdout parses the id-only form (no name given)', () => {
+  const stdout = 'backgrounded · a1b2c3d4\n  claude agents               list sessions\n';
+  assert.deepEqual(parseBgLaunchStdout(stdout), { shortId: 'a1b2c3d4', name: null });
+});
+
+test('parseBgLaunchStdout strips ANSI color codes before matching', () => {
+  const stdout = '\x1b[36mbackgrounded · \x1b[36m7bfd7dd7\x1b[39m · relay-claude-x-ab12cd34\x1b[39m\n';
+  assert.deepEqual(parseBgLaunchStdout(stdout), { shortId: '7bfd7dd7', name: 'relay-claude-x-ab12cd34' });
+});
+
+test('parseBgLaunchStdout finds the confirmation line even if other output precedes it', () => {
+  const stdout = 'some unrelated daemon status line\n\nbackgrounded · deadbeef · relay-claude-x-ab12cd34\n';
+  assert.deepEqual(parseBgLaunchStdout(stdout), { shortId: 'deadbeef', name: 'relay-claude-x-ab12cd34' });
+});
+
+test('parseBgLaunchStdout returns null for unrecognized output instead of throwing', () => {
+  assert.equal(parseBgLaunchStdout(''), null);
+  assert.equal(parseBgLaunchStdout('something else entirely\n'), null);
+  assert.equal(parseBgLaunchStdout('backgrounding is not the same word\n'), null);
 });

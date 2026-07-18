@@ -17,6 +17,9 @@ const DEFAULT_PERMISSION_MODE = 'auto';
 /** Session names are passed as a single argv item, but are kept to a safe, boring charset regardless. */
 const SESSION_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
+/** buildSessionName's uniqueSuffix must look like this (e.g. crypto.randomBytes(4).toString('hex')). */
+const SESSION_NAME_SUFFIX_PATTERN = /^[A-Za-z0-9]{4,16}$/;
+
 /**
  * Deterministic, ordered list of absolute paths where the Claude Code CLI
  * may be installed on macOS. A Finder-launched Electron app inherits a bare
@@ -58,24 +61,35 @@ function resolveClaudeExecutable(candidates, existsFn) {
 
 /**
  * Derive a safe, useful session name from the work description: lowercase,
- * non-alphanumeric runs collapsed to a single dash, trimmed, truncated, and
- * prefixed so it reads clearly in `claude agents` / the /resume picker.
- * Falls back to a fixed name when the description slugifies to nothing
- * (e.g. all-emoji or all-punctuation input).
+ * non-alphanumeric runs collapsed to a single dash, trimmed, and prefixed so
+ * it reads clearly in `claude agents` / the /resume picker. Always ends with
+ * a caller-supplied unique suffix (e.g. crypto.randomBytes(4).toString('hex'))
+ * — the slug alone is not enough to distinguish sessions: the slugifier only
+ * keeps `[a-z0-9]`, so any non-Latin work description (Cyrillic, CJK, emoji)
+ * collapses to the same empty slug, and two concurrent launches can share the
+ * same work description verbatim. The suffix is always intact in the output;
+ * only the slug/prefix is truncated to make room for it.
  *
  * @param {string} workDescription
+ * @param {string} uniqueSuffix - Short alphanumeric string, unique per launch.
  * @returns {string}
  */
-function buildSessionName(workDescription) {
+function buildSessionName(workDescription, uniqueSuffix) {
+  if (typeof uniqueSuffix !== 'string' || !SESSION_NAME_SUFFIX_PATTERN.test(uniqueSuffix)) {
+    throw new Error('uniqueSuffix must be a 4-16 character alphanumeric string');
+  }
+  const suffix = uniqueSuffix.toLowerCase();
+
   const trimmed = typeof workDescription === 'string' ? workDescription.trim() : '';
   const slug = trimmed
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-    .replace(/-+$/g, '');
-  const name = slug ? `relay-claude-${slug}` : 'relay-claude-coordinator';
-  return name.slice(0, 64);
+    .replace(/^-+|-+$/g, '');
+  const base = slug ? `relay-claude-${slug}` : 'relay-claude-coordinator';
+
+  const maxBaseLen = 64 - 1 - suffix.length; // reserve room for "-" + suffix
+  const truncatedBase = base.slice(0, maxBaseLen).replace(/-+$/g, '');
+  return `${truncatedBase}-${suffix}`;
 }
 
 /**
@@ -158,15 +172,55 @@ function findLaunchedSession(sessions, sessionName) {
   ), null);
 }
 
+/**
+ * Strip ANSI SGR escape sequences (color/style codes). `claude --bg`'s
+ * confirmation line is normally plain when stdout isn't a TTY, but some
+ * environments force color via a FORCE_COLOR env var regardless — strip
+ * defensively so the parser below isn't tripped up by escape codes.
+ *
+ * @param {string} str
+ * @returns {string}
+ */
+function stripAnsi(str) {
+  // eslint-disable-next-line no-control-regex
+  return String(str).replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/**
+ * Parse the authoritative confirmation line `claude --bg` prints to stdout
+ * on a successful dispatch: `backgrounded · <shortId> · <name>`
+ * (followed by dimmed hint lines, which are ignored). This is the primary,
+ * race-free source of the new session's identity — unlike a follow-up
+ * `claude agents --json` call, it cannot miss a session that hasn't shown up
+ * in the listing yet. Returns null (never throws) if the line isn't found,
+ * e.g. because a future CLI version changes this text — the caller falls
+ * back to `agents --json` in that case.
+ *
+ * @param {string} stdout
+ * @returns {{shortId: string, name: string|null}|null}
+ */
+function parseBgLaunchStdout(stdout) {
+  const clean = stripAnsi(stdout);
+  for (const line of clean.split(/\r?\n/)) {
+    const match = line.trim().match(/^backgrounded\s+·\s+(\S+)(?:\s+·\s+(\S+))?/);
+    if (match) {
+      return { shortId: match[1], name: match[2] || null };
+    }
+  }
+  return null;
+}
+
 module.exports = {
   DEFAULT_MODEL,
   DEFAULT_EFFORT,
   DEFAULT_PERMISSION_MODE,
   SESSION_NAME_PATTERN,
+  SESSION_NAME_SUFFIX_PATTERN,
   getClaudeExecutableCandidates,
   resolveClaudeExecutable,
   buildSessionName,
   buildClaudeBackgroundLaunchArgs,
   parseAgentsJson,
   findLaunchedSession,
+  parseBgLaunchStdout,
 };

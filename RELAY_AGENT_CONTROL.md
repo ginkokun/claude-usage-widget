@@ -109,15 +109,51 @@ one that exists on disk is used:
 If none exist, the action fails with a notification listing every path
 checked — it never silently falls back to the clipboard/Desktop-only path.
 
-After the CLI launches the background session, the widget makes a
-best-effort call to `claude agents --json --cwd <repo>` to find the new
-session by its generated name and report its session id. That lookup is
-best-effort only: a failure there does not mean the launch failed, since the
-launch itself already succeeded before the lookup runs. When the id cannot
-be confirmed, the notification says so explicitly rather than fabricating
-success detail; success is never inferred merely from `shell.openPath`
-succeeding (that call only activates Claude Desktop's window afterward and
-is not part of the launch itself).
+### Session naming (unique per launch)
+
+The dispatched session's `--name` is `relay-claude-<slug>-<suffix>` (or
+`relay-claude-coordinator-<suffix>` when the slug is empty), where `<slug>`
+is the work description lowercased with non-`[a-z0-9]` runs collapsed to a
+single dash, and `<suffix>` is a fresh random 8-hex-char token
+(`crypto.randomBytes(4).toString('hex')`) generated per launch. The slug
+alone is not enough to distinguish sessions: it only keeps `[a-z0-9]`, so a
+work description in Cyrillic, CJK, or emoji — or any input that's all
+punctuation — collapses to the same empty slug every time, and two
+concurrent launches can carry the exact same work description verbatim
+regardless of script. The random suffix is what actually keeps two Russian
+(or otherwise non-Latin) missions, or two identical concurrent launches,
+apart in `claude agents` / the `/resume` picker. Only the slug/prefix is
+ever truncated to fit the 64-char limit — the suffix is always kept intact.
+
+### Session identity resolution (stdout-first, `agents --json` as fallback)
+
+After the CLI launches the background session, the widget reads the
+session's identity in two tiers, in order:
+
+1. **Authoritative:** `claude --bg`'s own stdout confirmation line —
+   `backgrounded · <id> · <name>` — parsed directly from the same process
+   call that performed the dispatch. This cannot race, since it comes from
+   the call that did the launching.
+2. **Best-effort fallback:** only if (1) can't be parsed (e.g. a future CLI
+   version changes that text), the widget calls `claude agents --json --cwd
+   <repo>` and looks up the new session by its generated name. This lookup
+   *can* race a session that hasn't shown up in the listing yet — which is
+   exactly why it only runs when the authoritative source is unavailable,
+   never as the primary path.
+
+Either way, a failed identity lookup never means the launch itself failed —
+that's already decided by the CLI process exiting cleanly. When the id
+cannot be confirmed by either tier, the notification says so explicitly
+rather than fabricating success detail; success is never inferred merely
+from `shell.openPath` succeeding (that call only activates Claude Desktop's
+window afterward and is not part of the launch itself).
+
+**Residual limitation:** tier (1) depends on `claude --bg`'s current
+human-readable confirmation text, which is not a documented, versioned
+contract — a future CLI release could change its wording and silently drop
+to tier (2) (or, if `agents --json`'s shape also changes, to "id not
+confirmed"). Either way the launch itself is unaffected; only how quickly
+and reliably its identity is confirmed.
 
 ## Known limitation
 

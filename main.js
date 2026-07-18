@@ -32,7 +32,9 @@ const {
   buildClaudeBackgroundLaunchArgs,
   parseAgentsJson,
   findLaunchedSession,
+  parseBgLaunchStdout,
 } = require('./src/claude-code-launch');
+const crypto = require('crypto');
 
 const GITHUB_OWNER = 'SlavomirDurej';
 const GITHUB_REPO = 'claude-usage-widget';
@@ -680,19 +682,36 @@ function resolveClaudeExecutablePath() {
 }
 
 // Dispatches a real Claude Code background session (opus/high/auto) with
-// the coordinator prompt as its initial message, cwd set to repoPath. Then
-// makes a best-effort attempt to confirm the session's identity via
-// `claude agents --json` — a failed lookup does not mean the launch failed,
-// since the launch itself already succeeded (execFile resolved cleanly).
+// the coordinator prompt as its initial message, cwd set to repoPath. The
+// session identity is read, in order:
+//   1. The CLI's own "backgrounded · <id> · <name>" confirmation line on
+//      stdout — authoritative and race-free, since it's the same process
+//      call that performed the dispatch.
+//   2. A best-effort fallback via `claude agents --json` only if (1) can't
+//      be parsed (e.g. a future CLI version changes that text) — this one
+//      *can* race a session that hasn't shown up in the listing yet, which
+//      is exactly why it's the fallback and not the primary source.
+// Either way, a failed identity lookup never means the launch itself
+// failed — that's already decided by execFile resolving cleanly.
 async function launchClaudeCodeSession(prompt, sessionName, repoPath) {
   const execPath = resolveClaudeExecutablePath();
   const args = buildClaudeBackgroundLaunchArgs({ prompt, sessionName });
+  // NO_COLOR/FORCE_COLOR=0 keep the confirmation line plain text even if the
+  // inherited environment happens to force ANSI color on for non-TTY output.
+  const execOptions = { cwd: repoPath, timeout: 20000, env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } };
 
+  let launchStdout = '';
   try {
-    await execFileAsync(execPath, args, { cwd: repoPath, timeout: 20000 });
+    const result = await execFileAsync(execPath, args, execOptions);
+    launchStdout = result.stdout;
   } catch (error) {
     const detail = error.stderr ? ` (${error.stderr})` : '';
     throw new Error(`Claude Code launch failed: ${error.message}${detail}`);
+  }
+
+  const parsed = parseBgLaunchStdout(launchStdout);
+  if (parsed) {
+    return { sessionName, sessionId: parsed.shortId, pid: null };
   }
 
   try {
@@ -734,7 +753,10 @@ async function launchClaudeCoordinator() {
       return;
     }
 
-    const sessionName = buildSessionName(workDescription);
+    // A random suffix keeps sessions distinguishable even when the slug
+    // collapses (e.g. an all-Cyrillic/CJK/emoji work description) or two
+    // launches share the exact same work description.
+    const sessionName = buildSessionName(workDescription, crypto.randomBytes(4).toString('hex'));
     const session = await launchClaudeCodeSession(payload.prompt, sessionName, repoPath);
 
     // Best-effort: bring Claude Desktop's Code UI to the front. The session
