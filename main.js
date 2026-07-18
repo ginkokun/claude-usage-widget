@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, session, shell, Notification, safeStorage, nativeImage } = require('electron');
 const path = require('path');
 const https = require('https');
 const { execFile } = require('child_process');
@@ -25,6 +25,14 @@ const {
   buildMonitorCommand,
   WORK_DESCRIPTION_MAX_CHARS,
 } = require('./src/relay-agent-control');
+const {
+  getClaudeExecutableCandidates,
+  resolveClaudeExecutable,
+  buildSessionName,
+  buildClaudeBackgroundLaunchArgs,
+  parseAgentsJson,
+  findLaunchedSession,
+} = require('./src/claude-code-launch');
 
 const GITHUB_OWNER = 'SlavomirDurej';
 const GITHUB_REPO = 'claude-usage-widget';
@@ -614,6 +622,21 @@ function runOsascript(script, args) {
   });
 }
 
+// Generic execFile promise wrapper for the Claude Code CLI (no shell, no
+// osascript involved — args are passed straight through as argv items).
+function execFileAsync(execPath, args, options) {
+  return new Promise((resolve, reject) => {
+    execFile(execPath, args, options || {}, (error, stdout, stderr) => {
+      if (error) {
+        error.stderr = String(stderr || '').slice(0, 500);
+        reject(error);
+        return;
+      }
+      resolve({ stdout: String(stdout || ''), stderr: String(stderr || '') });
+    });
+  });
+}
+
 // Resolves to the trimmed answer, or '' when the dialog was cancelled.
 // Any other osascript failure propagates to the caller.
 async function promptForWorkDescription() {
@@ -635,6 +658,50 @@ function showRelayStationError(message) {
 
 function getRelayStationRepoPath() {
   return store.get('settings.relayStationRepoPath') || getDefaultConfig().relaystationMain;
+}
+
+function isValidRelayRepoPath(repoPath) {
+  return typeof repoPath === 'string'
+    && path.isAbsolute(repoPath)
+    && fs.existsSync(repoPath)
+    && fs.statSync(repoPath).isDirectory();
+}
+
+// Resolves the Claude Code CLI to an explicit absolute path. A Finder-launched
+// Electron app does not inherit the interactive shell's PATH, so this cannot
+// rely on PATH lookup — see src/claude-code-launch.js for the candidate list.
+function resolveClaudeExecutablePath() {
+  const candidates = getClaudeExecutableCandidates(os.homedir());
+  const execPath = resolveClaudeExecutable(candidates, fs.existsSync);
+  if (!execPath) {
+    throw new Error(`Claude Code CLI not found. Checked: ${candidates.join(', ')}`);
+  }
+  return execPath;
+}
+
+// Dispatches a real Claude Code background session (opus/high/auto) with
+// the coordinator prompt as its initial message, cwd set to repoPath. Then
+// makes a best-effort attempt to confirm the session's identity via
+// `claude agents --json` — a failed lookup does not mean the launch failed,
+// since the launch itself already succeeded (execFile resolved cleanly).
+async function launchClaudeCodeSession(prompt, sessionName, repoPath) {
+  const execPath = resolveClaudeExecutablePath();
+  const args = buildClaudeBackgroundLaunchArgs({ prompt, sessionName });
+
+  try {
+    await execFileAsync(execPath, args, { cwd: repoPath, timeout: 20000 });
+  } catch (error) {
+    const detail = error.stderr ? ` (${error.stderr})` : '';
+    throw new Error(`Claude Code launch failed: ${error.message}${detail}`);
+  }
+
+  try {
+    const { stdout } = await execFileAsync(execPath, ['agents', '--json', '--cwd', repoPath], { timeout: 8000 });
+    const found = findLaunchedSession(parseAgentsJson(stdout), sessionName);
+    return { sessionName, sessionId: found?.sessionId ?? null, pid: found?.pid ?? null };
+  } catch {
+    return { sessionName, sessionId: null, pid: null };
+  }
 }
 
 async function launchCodexCoordinator() {
@@ -661,12 +728,30 @@ async function launchClaudeCoordinator() {
       showRelayStationError(`Work description is too long (max ${WORK_DESCRIPTION_MAX_CHARS} characters).`);
       return;
     }
-    clipboard.writeText(payload.prompt);
-    const openError = await shell.openPath('/Applications/Claude.app');
-    if (openError) {
-      throw new Error('Claude Desktop could not be opened.');
+    const repoPath = getRelayStationRepoPath();
+    if (!isValidRelayRepoPath(repoPath)) {
+      showRelayStationError('Relay Station repo path is missing or invalid.');
+      return;
     }
-    new Notification({ title: 'Relay Station', body: 'Coordinator prompt copied to clipboard.' }).show();
+
+    const sessionName = buildSessionName(workDescription);
+    const session = await launchClaudeCodeSession(payload.prompt, sessionName, repoPath);
+
+    // Best-effort: bring Claude Desktop's Code UI to the front. The session
+    // is already dispatched at this point, so a failure here is logged only
+    // — it must never be reported as a launch failure.
+    try {
+      const openError = await shell.openPath('/Applications/Claude.app');
+      if (openError) console.warn('[Relay Station] Could not activate Claude.app:', openError);
+    } catch (openError) {
+      console.warn('[Relay Station] Could not activate Claude.app:', openError.message);
+    }
+
+    const identity = session.sessionId ? ` (session ${session.sessionId})` : ' (session id not confirmed)';
+    new Notification({
+      title: 'Relay Station',
+      body: `Claude Code session "${session.sessionName}" launched${identity}.`,
+    }).show();
   } catch (error) {
     showRelayStationError(`Failed to launch Claude coordinator: ${error.message}`);
   }
@@ -675,11 +760,7 @@ async function launchClaudeCoordinator() {
 async function openTerminalControlBoard() {
   try {
     const repoPath = getRelayStationRepoPath();
-    const isValidRepo = typeof repoPath === 'string'
-      && path.isAbsolute(repoPath)
-      && fs.existsSync(repoPath)
-      && fs.statSync(repoPath).isDirectory();
-    if (!isValidRepo) {
+    if (!isValidRelayRepoPath(repoPath)) {
       showRelayStationError('Relay Station repo path is missing or invalid.');
       return;
     }

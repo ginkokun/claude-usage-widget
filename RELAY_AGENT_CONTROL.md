@@ -18,7 +18,7 @@ and Weekly).
 | Action | Behavior |
 |--------|----------|
 | Launch Codex Coordinator… | Opens the official `codex://threads/new` deep link with a new task composer prefilled with the coordinator prompt. It never auto-sends — the operator submits it manually. |
-| Launch Claude Coordinator… | Copies an Opus/high coordinator prompt to the clipboard and opens Claude Desktop. Claude Desktop has no deep link to prefill a chat, so the operator must create/select a chat and paste/send the prompt themselves. |
+| Launch Claude Coordinator… | Resolves the installed Claude Code CLI and launches a real background session (`claude --bg`, model `opus`, effort `high`, permission-mode `auto`) with cwd set to the configured Relay Station repo and the coordinator prompt submitted as the session's initial message — no manual paste required. Claude Desktop is then activated so the new session is visible in its Code UI. A notification reports the session name and, when confirmable, its session id. |
 | Open Terminal Control Board | Launches a Terminal window running the absolute path to `<relaystationMain repo>/scripts/agent_watch.py` as the watch board. |
 | Open TV Fleet Dashboard | Opens only a valid, configured HTTP(S) URL. Disabled (greyed out) while no dashboard URL is configured. |
 
@@ -53,10 +53,15 @@ its other contents when discussing this feature.
   as a separate argv item after `--`, never interpolated into the AppleScript
   or a shell string. The work description is not passed into AppleScript at
   all — it is captured by the fixed prompt dialog and returned on stdout, then
-  used only to build the deep link or clipboard payload. It is never
-  interpolated into AppleScript source.
-- No Accessibility automation, no simulated keystrokes, and no auto-send —
-  the operator always performs the final submit action.
+  used only to build the Codex deep link or the prompt submitted to the
+  Claude CLI session. It is never interpolated into AppleScript source.
+- No Accessibility automation, no simulated keystrokes, and no auto-send for
+  the Codex path — the operator always performs the final submit action there.
+- The Claude Coordinator launch runs the Claude Code CLI via `execFile` with
+  an explicit argv array (never a shell string), so the coordinator prompt
+  cannot be interpreted as a flag or break out into shell syntax regardless
+  of its content. The CLI's own `--bg` session dispatch is the "submit" step
+  for that path — there is no clipboard, no paste, and no simulated input.
 - No network calls occur during tests.
 - The TV Fleet Dashboard only opens URLs that pass an `http(s)` scheme
   allowlist check; anything else is rejected.
@@ -90,11 +95,36 @@ Deployment first backs up the currently installed
 launch or smoke testing fails, the backup is restored in place of the new
 build. The backup is deleted only after the new build is verified to work.
 
+## Claude Coordinator launch (native background session)
+
+The Claude Code CLI is resolved to an explicit absolute path — a
+Finder-launched Electron app does not inherit an interactive shell's `PATH`,
+so PATH lookup is not used. Candidates are checked in order and the first
+one that exists on disk is used:
+
+1. `<home>/.local/bin/claude` (native install script default)
+2. `/opt/homebrew/bin/claude` (Homebrew, Apple Silicon)
+3. `/usr/local/bin/claude` (Homebrew, Intel / npm global default prefix)
+
+If none exist, the action fails with a notification listing every path
+checked — it never silently falls back to the clipboard/Desktop-only path.
+
+After the CLI launches the background session, the widget makes a
+best-effort call to `claude agents --json --cwd <repo>` to find the new
+session by its generated name and report its session id. That lookup is
+best-effort only: a failure there does not mean the launch failed, since the
+launch itself already succeeded before the lookup runs. When the id cannot
+be confirmed, the notification says so explicitly rather than fabricating
+success detail; success is never inferred merely from `shell.openPath`
+succeeding (that call only activates Claude Desktop's window afterward and
+is not part of the launch itself).
+
 ## Known limitation
 
-Claude Desktop has no supported deep-link contract in this implementation, so
-prompt handoff to it is clipboard-based and requires manual paste/send — this
-is a platform constraint, not an oversight.
+The Codex path still has no deep-link contract for auto-send — Codex's
+`codex://threads/new` link only prefills the composer, so the operator
+submits it manually there. The Claude path no longer has this limitation:
+it dispatches and submits a real session with no manual paste step.
 
 ## Token efficiency
 

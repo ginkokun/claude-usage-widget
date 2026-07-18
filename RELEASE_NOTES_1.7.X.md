@@ -4,6 +4,19 @@ This document consolidates all release notes for the 1.7.x release series.
 
 ---
 
+## v1.7.9
+
+**Released:** July 2026
+
+This release replaces the clipboard-based Claude Coordinator launch with a native Claude Code background session.
+
+### What's New
+
+**Native Claude Coordinator launch**
+"Launch Claude Coordinator…" no longer copies the prompt to the clipboard and just opens Claude Desktop for a manual paste. It now resolves the installed Claude Code CLI to an explicit absolute path (checking the native-install and Homebrew locations in order — a Finder-launched app can't rely on `PATH`), then dispatches a real background session (`claude --bg`, model `opus`, effort `high`, permission-mode `auto`) with cwd set to the configured Relay Station repo and the coordinator prompt submitted as the session's initial message. Claude Desktop is then activated so the new session is visible in its Code UI. A notification reports the session name and, when confirmable via `claude agents --json`, its session id — launch success is never inferred merely from Claude Desktop opening. The Codex Coordinator path (deep link, manual submit) is unchanged. See [RELAY_AGENT_CONTROL.md](RELAY_AGENT_CONTROL.md#claude-coordinator-launch-native-background-session).
+
+---
+
 ## v1.7.8
 
 **Released:** July 2026
