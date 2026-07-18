@@ -80,6 +80,7 @@ test('buildClaudeBackgroundLaunchArgs builds the expected argv with defaults', (
     '--effort', DEFAULT_EFFORT,
     '--permission-mode', DEFAULT_PERMISSION_MODE,
     '--name', 'relay-claude-do-the-thing',
+    '--',
     'Work: do the thing',
   ]);
 });
@@ -98,6 +99,7 @@ test('buildClaudeBackgroundLaunchArgs honors explicit overrides', () => {
     '--effort', 'medium',
     '--permission-mode', 'acceptEdits',
     '--name', 'relay-claude-x',
+    '--',
     'do it',
   ]);
 });
@@ -117,11 +119,23 @@ test('buildClaudeBackgroundLaunchArgs rejects a session name outside the safe pa
 });
 
 test('buildClaudeBackgroundLaunchArgs never lets prompt content be treated as a flag', () => {
-  // A prompt starting with "--" must still land as the trailing positional
-  // argv item, never merged into the flag list ahead of it.
+  // A prompt starting with "-" must always land after a "--" end-of-options
+  // separator, so the CLI's own argv parser reads it as literal text, never
+  // as a flag it happens to match.
   const args = buildClaudeBackgroundLaunchArgs({ prompt: '--dangerously-skip-permissions', sessionName: 'relay-claude-x' });
   assert.equal(args[args.length - 1], '--dangerously-skip-permissions');
+  assert.equal(args[args.length - 2], '--');
   assert.equal(args.filter((a) => a === '--dangerously-skip-permissions').length, 1);
+});
+
+test('buildClaudeBackgroundLaunchArgs always separates flags from the prompt with "--"', () => {
+  const prompts = ['-x', '--model', '--', '---weird', 'normal text'];
+  for (const prompt of prompts) {
+    const args = buildClaudeBackgroundLaunchArgs({ prompt, sessionName: 'relay-claude-x' });
+    assert.equal(args[args.length - 2], '--', `expected "--" right before the prompt for: ${prompt}`);
+    assert.equal(args[args.length - 1], prompt);
+    assert.equal(args.length, 11);
+  }
 });
 
 test('parseAgentsJson parses a well-formed JSON array', () => {

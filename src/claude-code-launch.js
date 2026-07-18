@@ -82,7 +82,10 @@ function buildSessionName(workDescription) {
  * Build the argv array (no shell involved — this is passed straight to
  * execFile) that dispatches the coordinator prompt as a new Claude Code
  * background session: given model/effort/permission-mode, a display name,
- * and the prompt as the initial message.
+ * and the prompt as the initial message. A `--` end-of-options separator
+ * precedes the prompt so a work description starting with "-" (e.g.
+ * "--dangerously-skip-permissions") is always read as literal prompt text,
+ * never reinterpreted as a CLI flag by the argv parser.
  *
  * @param {object} options
  * @param {string} options.prompt - Non-blank coordinator prompt.
@@ -114,6 +117,7 @@ function buildClaudeBackgroundLaunchArgs(options) {
     '--effort', effort,
     '--permission-mode', permissionMode,
     '--name', sessionName,
+    '--', // end-of-options: the prompt is user-controlled and may start with "-"
     prompt,
   ];
 }
